@@ -44,7 +44,6 @@ sudo python3 setup.py install
 You can use cmake to build everything.
 
 ```
-git clone https://gitlab-master.nvidia.com/eagostini/l2fwd-nv.git
 cd l2fwd-nv
 git submodule update --init
 mkdir build
@@ -169,3 +168,7 @@ Here we compare I/O forwarding throughput using differnt GPU workloads: CUDA ker
 ### Packet size
 
 If the packet generator is sending non-canonical packets sizes (e.g. 1514B) cache alignment problems may slow down the performance in case of GPU memory. To enhance performance you can use the EAL param `rxq_pkt_pad_en=1` to the command line, e.g. `-w b5:00.1,txq_inline_max=0,rxq_pkt_pad_en=1`.
+
+## References
+
+More info in NVIDIA GTC'21 session `S31972 - Accelerate DPDK Packet Processing Using GPU` E. Agostini
