@@ -120,17 +120,16 @@ l2fwd-nv machine SW features:
 * DPDK version: 20.11
 * CUDA 11.1
 
-System tuning:
+Suggestes system configuration:
 
 ```
-mlxconfig -d b5:00.0 set CQE_COMPRESSION=1
-mlxfwreset -d b5:00.0 r -y
-ifconfig enp181s0f0 mtu 8192 up
-ifconfig enp181s0f1 mtu 8192 up
-ethtool -A enp181s0f0 rx off tx off
-ethtool -A enp181s0f1 rx off tx off
-setpci -s b5:00.0 68.w=5930
-setpci -s b5:00.1 68.w=5930
+mlxconfig -d <NIC Bus ID> set CQE_COMPRESSION=1
+mlxfwreset -d <NIC Bus ID> r -y
+ifconfig <NIC Interface name port 0> mtu 8192 up
+ifconfig <NIC Interface name port 1> mtu 8192 up
+ethtool -A <NIC Interface name port 0> rx off tx off
+ethtool -A <NIC Interface name port 0> rx off tx off
+setpci -s <NIC Bus ID> 68.w=5930
 sysctl -w vm.zone_reclaim_mode=0
 sysctl -w vm.swappiness=0
 ```
