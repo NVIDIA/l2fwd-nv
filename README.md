@@ -44,8 +44,8 @@ sudo python3 setup.py install
 You can use cmake to build everything.
 
 ```
+git clone --recurse-submodules https://github.com/NVIDIA/l2fwd-nv.git
 cd l2fwd-nv
-git submodule update --init
 mkdir build
 cd build
 cmake ..
@@ -55,7 +55,7 @@ make -j$(nproc --all)
 ### Build and install GDRdrv
 
 ```
-cd l2fwd-nv/subprojects/gdrcopy
+cd l2fwd-nv/external/gdrcopy
 make
 sudo ./insmod.sh
 ```
@@ -89,7 +89,7 @@ In the following benchmarks we report the forwarding throughput: assuming packet
 In the following performance report, we used the T-Rex DPDK packet generator [v2.87](https://github.com/cisco-system-traffic-generator/trex-core/releases/tag/v2.87). You can reproduce the same benchmarks using testpmd (built in the DPDK submodule of this repo) using command line like the following one:
 
 ```
-./subprojects/dpdk/x86_64-native-linuxapp-gcc/app/dpdk-testpmd -l 2-21 --main-lcore=2 -a b5:00.1 -- --port-numa-config=0,0 --socket-num=0 --burst=64 --txd=1024 --rxd=1024 --mbcache=512 --rxq=8 --txq=8 --forward-mode=txonly -i --nb-cores=8 --txonly-multi-flow
+./external/dpdk/x86_64-native-linuxapp-gcc/app/dpdk-testpmd -l 2-21 --main-lcore=2 -a b5:00.1 -- --port-numa-config=0,0 --socket-num=0 --burst=64 --txd=1024 --rxd=1024 --mbcache=512 --rxq=8 --txq=8 --forward-mode=txonly -i --nb-cores=8 --txonly-multi-flow
 
 testpmd> set txpkts <pkt size>
 start
