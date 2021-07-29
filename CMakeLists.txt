@@ -38,6 +38,8 @@ option(ENABLE_NVTX  "Enable use of NVTX" OFF)
 
 SET(DPDK_TARGET dpdk_target)
 SET(DPDK_TARGET_ARCH x86_64-native-linuxapp-gcc)
+# Build on ARM
+# SET(DPDK_TARGET_ARCH aarch64-build-gcc)
 SET(DPDK_PATH ${CMAKE_CURRENT_SOURCE_DIR}/external/dpdk)
 message( ${DPDK_PATH})
 SET(DPDK_TARGET_PATH ${DPDK_PATH}/${DPDK_TARGET_ARCH})
@@ -77,13 +79,16 @@ STRING(CONCAT DPDK_DISABLED_DRIVERS
         "net/thunderx,"
         "net/vdev_netvsc,"
         "net/vmxnet3,"
-        )
+	"regex/octeontx2,"
+)
 
 EXECUTE_PROCESS(WORKING_DIRECTORY ${DPDK_PATH}
         COMMAND meson ${DPDK_TARGET_ARCH}
                 --prefix=${DPDK_TARGET_INSTALL_PATH}
                 -Dtests=false
                 -Ddisable_drivers=${DPDK_DISABLED_DRIVERS}
+		# --cross-file config/arm/arm64_armv8_linux_gcc
+		# -Dbuildtype=debug
         )
 
 # Set RTE_PKTMBUF_HEADROOM to 0 for GPU memory best performance
@@ -161,13 +166,46 @@ TARGET_INCLUDE_DIRECTORIES(${TARGET} PUBLIC include
                                             external/gdrcopy/src
                                             external/gdrcopy/src/gdrdrv
                                             PUBLIC ${CUDA_INCLUDE_DIRS})
+
 TARGET_LINK_LIBRARIES(${TARGET} ${DPDK_LIBS} ${CUDA_LIBRARIES} ${CUDA_DRIVER_LIBRARY} ${NVTX_LIB})
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -O3 -std=c++11  ${CMAKE_COMMON_FLAGS} -g3")
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -O3 -std=c++11 ${CMAKE_COMMON_FLAGS} -g3 ${DPDK_BUILD_FLAGS}")
+SET(GDRCOPY_FLAGS "-mavx -msse4.1")
+SET(CMAKE_C_FLAGS "${CMAKE_COMMON_FLAGS} ${DPDK_BUILD_FLAGS} ${GDRCOPY_FLAGS}")
 
 # Enable to debug CUDA kernels
-# SET(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_COMMON_FLAGS} -G -lineinfo")
+string(STRIP ${DPDK_BUILD_FLAGS} DPDK_STRIPPED_FLAGS)
+string(REGEX
+        REPLACE
+        "\-std\="
+        "\-Xcompiler \-std\="
+        DPDK_STRIPPED_FLAGS
+        ${DPDK_STRIPPED_FLAGS}
+)
 
-SET_TARGET_PROPERTIES(${TARGET} PROPERTIES COMPILE_FLAGS ${DPDK_BUILD_FLAGS})
+string(REGEX
+        REPLACE
+        "\-march\="
+        "\-Xcompiler \-march\="
+        DPDK_STRIPPED_FLAGS
+        ${DPDK_STRIPPED_FLAGS}
+)
+
+string(REGEX
+        REPLACE
+        "\-moutline\-atomics"
+        "\-Xcompiler \-moutline\-atomics"
+        DPDK_STRIPPED_FLAGS
+        ${DPDK_STRIPPED_FLAGS}
+)
+
+
+SET(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} ${CMAKE_COMMON_FLAGS} ${DPDK_STRIPPED_FLAGS}") # -G -lineinfo")
+
+message(STATUS "CMAKE_COMMON_FLAGS ${CMAKE_COMMON_FLAGS}")
+message(STATUS "CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS}")
+message(STATUS "CMAKE_CUDA_FLAGS ${CMAKE_CUDA_FLAGS}")
+message(STATUS "DPDK_BUILD_FLAGS ${DPDK_BUILD_FLAGS}")
+
 ADD_DEPENDENCIES(${TARGET} ${DPDK_TARGET})
-
 INSTALL(TARGETS ${TARGET} ARCHIVE DESTINATION lib LIBRARY DESTINATION lib PUBLIC_HEADER DESTINATION include/l2fwdnv)
+
