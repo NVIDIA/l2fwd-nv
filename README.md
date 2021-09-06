@@ -26,7 +26,51 @@ Please note that a single mempool is used for all the DPDK RX/TX queues. Using d
 
 Please note that not all the combinations give the best performance. This app should be considered a showcase to expose all the possibile combinations when dealing with GPUDirect RDMA and DPDK. l2fwd-nv has a trivial workload that doesn't really require the use of CUDA kernels.
 
-## Build
+## System configuration
+
+### Kernel configuration
+
+Ensure that your kernel parameters include the following list:
+```
+default_hugepagesz=1G hugepagesz=1G hugepages=16 tsc=reliable clocksource=tsc intel_idle.max_cstate=0 mce=ignore_ce processor.max_cstate=0 audit=0 idle=poll isolcpus=2-21 nohz_full=2-21 rcu_nocbs=2-21 rcu_nocb_poll nosoftlockup iommu=off intel_iommu=off
+```
+
+Note that `2-21` corresponds to the list of CPUs you intend to use for the DPDK application and the value of this parameter needs to be changed depending on the HW configuration.
+
+To permanently include these items in the kernel parameters, open `/etc/default/grub` with your favourite text editor and add them to the variable named `GRUB_CMDLINE_LINUX_DEFAULT`. Save this file, install new GRUB configuration and reboot the server:
+
+```
+$ sudo vim /etc/default/grub
+$ sudo update-grub
+$ sudo reboot
+```
+
+After reboot, verify that the changes have been applied. Example output:
+
+```
+$ cat /proc/cmdline 
+BOOT_IMAGE=/vmlinuz-5.4.0-53-lowlatency root=/dev/mapper/ubuntu--vg-ubuntu--lv ro maybe-ubiquity default_hugepagesz=1G hugepagesz=1G hugepages=16 tsc=reliable clocksource=tsc intel_idle.max_cstate=0 mce=ignore_ce processor.max_cstate=0 idle=poll isolcpus=2-21 nohz_full=2-21 rcu_nocbs=2-21 nosoftlockup iommu=off intel_iommu=off
+$ grep -i huge /proc/meminfo
+AnonHugePages:         0 kB
+ShmemHugePages:        0 kB
+HugePages_Total:      16
+HugePages_Free:       15
+HugePages_Rsvd:        0
+HugePages_Surp:        0
+Hugepagesize:    1048576 kB
+Hugetlb:        16777216 kB
+```
+
+### Mellanox network card
+
+You need to follow few steps to configure your Mellanox network card.
+
+* Download Mellanox OFED 5.1 from [here](http://www.mellanox.com/page/products_dyn?product_family=26)
+* Enable CQE compression `mlxconfig -d <NIC PCIe address> set CQE_COMPRESSION=1`
+
+If the Mellanox NIC supports IB and Ethernet mode (VPI adapters):
+* Set the IB card as an Ethernet card `mlxconfig -d <NIC PCIe address> set LINK_TYPE_P1=2 LINK_TYPE_P2=2`
+* Reboot the server or `mlxfwreset -d <NIC PCIe address> reset` and `/etc/init.d/openibd restart`
 
 ### Install meson
 
@@ -39,7 +83,18 @@ cd meson-0.56.0
 sudo python3 setup.py install
 ```
 
-### Build the project
+### Build and install nv_peer_mem
+
+This module is required on the machine where l2fwd-nv is running to enable GPUDirect RDMA on the system.
+
+```
+git clone https://github.com/Mellanox/nv_peer_memory.git
+cd nv_peer_memory
+make
+sudo insmod nv_peer_mem.ko
+```
+
+## Build the project
 
 You can use cmake to build everything.
 
@@ -52,7 +107,7 @@ cmake ..
 make -j$(nproc --all)
 ```
 
-### Build and install GDRdrv
+#### GDRdrv
 
 ```
 cd l2fwd-nv/external/gdrcopy
