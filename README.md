@@ -28,6 +28,8 @@ Please note that not all the combinations give the best performance. This app sh
 
 ## System configuration
 
+Please note that DPDK 21.08 is included as submodule of this project and it's built locally with l2fwd-nv.
+
 ### Kernel configuration
 
 Ensure that your kernel parameters include the following list:
@@ -65,16 +67,21 @@ Hugetlb:        16777216 kB
 
 You need to follow few steps to configure your Mellanox network card.
 
-* Download Mellanox OFED 5.1 from [here](http://www.mellanox.com/page/products_dyn?product_family=26)
+* Download Mellanox OFED 5.4 from [here](http://www.mellanox.com/page/products_dyn?product_family=26)
 * Enable CQE compression `mlxconfig -d <NIC PCIe address> set CQE_COMPRESSION=1`
 
 If the Mellanox NIC supports IB and Ethernet mode (VPI adapters):
 * Set the IB card as an Ethernet card `mlxconfig -d <NIC PCIe address> set LINK_TYPE_P1=2 LINK_TYPE_P2=2`
 * Reboot the server or `mlxfwreset -d <NIC PCIe address> reset` and `/etc/init.d/openibd restart`
 
+### NVIDIA GPU
+
+Download and install the latest CUDA toolkit from [here](https://developer.nvidia.com/cuda-downloads).
+
 ### Install meson
 
-DPDK 20.11 requires Meson > 0.47.1.
+DPDK 21.08 requires Meson > 0.49.2.
+
 ```
 sudo apt-get install python3-setuptools ninja-build
 wget https://github.com/mesonbuild/meson/releases/download/0.56.0/meson-0.56.0.tar.gz
@@ -85,7 +92,12 @@ sudo python3 setup.py install
 
 ### Build and install nv_peer_mem
 
-This module is required on the machine where l2fwd-nv is running to enable GPUDirect RDMA on the system.
+In order to enable GPUDirect RDMA with a Mellanox network card you need to install an additional kernel module.
+
+If you installed CUDA 11.4 or newer, you can use the `nvidia_peermem` module that comes with the NVIDIA driver.
+More info [here](https://docs.nvidia.com/cuda/gpudirect-rdma/index.html#nvidia-peermem).
+
+If you installed an older CUDA version you need to manually build and install the `nv_peer_memory` module.
 
 ```
 git clone https://github.com/Mellanox/nv_peer_memory.git
@@ -168,12 +180,12 @@ l2fwd-nv machine HW features:
 * PCI bridge between NIC and GPU: PLX Technology, Inc. PEX 8747 48-Lane, 5-Port PCI Express Gen 3 (8.0 GT/s)
 
 l2fwd-nv machine SW features:
-* Ubuntu 18.04.5 LTS
+* Ubuntu 20.04.2 LTS
 * Linux kernel 5.4.0-53-lowlatency
 * GCC: 8.4.0 (Ubuntu 8.4.0-1ubuntu1~18.04)
-* Mellanox OFED: MLNX_OFED_LINUX-5.1-0.6.6.0
-* DPDK version: 20.11
-* CUDA 11.1
+* Mellanox OFED 5.4-1.0.3.0
+* DPDK version: 21.08 (included in this project)
+* CUDA 11.4
 
 Suggestes system configuration:
 
