@@ -1,6 +1,6 @@
 [submodule "external/gdrcopy"]
 	path = external/gdrcopy
-	url = git@github.com:NVIDIA/gdrcopy.git
+	url = https://github.com/NVIDIA/gdrcopy.git
 [submodule "external/dpdk"]
 	path = external/dpdk
-	url = git@github.com:DPDK/dpdk.git
+	url = https://github.com/DPDK/dpdk.git
