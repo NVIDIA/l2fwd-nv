@@ -895,7 +895,7 @@ int main(int argc, char **argv)
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	pipeline_v.reserve(conf_num_pipelines);
 	for(int index_p = 0; index_p < conf_num_pipelines; index_p++)
-		pipeline_v[index_p] = new Pipeline(index_p, conf_workload, conf_pktime_ns, &gdr_descr, index_p, index_p, conf_gpu_id);
+		pipeline_v.push_back(new Pipeline(index_p, conf_workload, conf_pktime_ns, &gdr_descr, index_p, index_p, conf_gpu_id));
 
 	if (conf_nvprofiler)
 		cudaProfilerStart();

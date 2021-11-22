@@ -142,7 +142,7 @@ __global__ void kernel_persistent_mac_update(struct rte_gpu_comm_list * comm_lis
 		if (wait_status_shared[0] != RTE_GPU_COMM_LIST_READY)
 			break;
 
-			if (idx < comm_list[item_index].num_pkts && comm_list->pkt_list[idx].addr != 0) {
+		if (idx < comm_list[item_index].num_pkts && comm_list->pkt_list[idx].addr != 0) {
 			if(wtime_n)
 				pkt_start = __globaltimer();
 
