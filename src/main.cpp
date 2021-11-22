@@ -36,19 +36,19 @@ static uint64_t conf_pktime_ns = 0;
 static int conf_buffer_split = 0;
 
 static const char short_options[] = 
-	"b:"			/* burst size */
-    "d:"			/* data room size */
-    "g:"			/* GPU device id */
-    "h"				/* help */
-    "m:"			/* mempool type */
-	"n"				/* Enable CUDA profiler */
-	"p:"			/* num of pipelines */
-	"s"				/* Enable buffer split */
-	"t:"			/* Force execution time per packet */
-    "v:"			/* performance packets */
-	"w:"			/* workload type */
-    "z:"			/* warmup packets */
-    ;
+	"b:"  /* burst size */
+	"d:"  /* data room size */
+	"g:"  /* GPU device id */
+	"h"   /* help */
+	"m:"  /* mempool type */
+	"n"   /* Enable CUDA profiler */
+	"p:"  /* num of pipelines */
+	"s"   /* Enable buffer split */
+	"t:"  /* Force execution time per packet */
+	"v:"  /* performance packets */
+	"w:"  /* workload type */
+	"z:"  /* warmup packets */
+;
 
 static std::vector<Pipeline *> pipeline_v;
 
@@ -56,12 +56,6 @@ static std::vector<Pipeline *> pipeline_v;
 //// GDRCopy
 ////////////////////////////////////////////////////////////////////////
 gdr_t gdr_descr;
-// Flush GPUDirect RDMA memory
-gdr_mh_t flush_mh;
-uintptr_t flush_d;
-uintptr_t flush_h;
-uintptr_t flush_free; // used to free devmem
-size_t flush_size;
 
 ////////////////////////////////////////////////////////////////////////
 //// DPDK config
@@ -72,21 +66,20 @@ struct rte_pktmbuf_extmem ext_mem;
 
 static struct rte_eth_conf conf_eth_port = {
 	.rxmode = {
-				.mq_mode = ETH_MQ_RX_RSS,
-				.max_rx_pkt_len = conf_data_room_size,
-				.split_hdr_size = 0,
-				.offloads = 0,
-			},
+		.mq_mode = ETH_MQ_RX_RSS,
+		.split_hdr_size = 0,
+		.offloads = 0,
+	},
 	.txmode = {
-			.mq_mode = ETH_MQ_TX_NONE,
-			.offloads = 0,
-			},
+		.mq_mode = ETH_MQ_TX_NONE,
+		.offloads = 0,
+	},
 	.rx_adv_conf = {
-			.rss_conf = {
-						.rss_key = NULL,
-						.rss_hf = ETH_RSS_IP
-					},
-			},
+		.rss_conf = {
+			.rss_key = NULL,
+			.rss_hf = ETH_RSS_IP
+		},
+	},
 };
 
 ////////////////////////////////////////////////////////////////////////
@@ -100,7 +93,7 @@ t_ns main_end;
 ////////////////////////////////////////////////////////////////////////
 //// Inter-threads communication
 ////////////////////////////////////////////////////////////////////////
-volatile bool force_quit;
+static volatile bool force_quit;
 
 ////////////////////////////////////////////////////////////////////////
 //// Static functions
@@ -179,7 +172,7 @@ static void print_stats(void)
 	fflush(stdout);
 }
 
-static int workload_with_gpu(int w) {
+static inline int workload_with_gpu(int w) {
 	if(w >= GPU_WORKLOAD)
 		return 1;
 	return 0;
@@ -408,8 +401,7 @@ static int rx_core(void *arg)
 	long pipeline_idx = (long)arg;
 	int nb_rx = 0, bindex = 0, nbytes = 0, nburst = 0, ngraph = 0;
 	Pipeline * p_v = pipeline_v[pipeline_idx];
-	struct burst_item * blist = p_v->burst_list;
-	uint8_t flush_value = 0;
+	struct rte_mbuf * rx_mbufs[MAX_MBUFS_BURST];
 	uint32_t ret = 0;
 
 	printf("Starting RX Core %u on queue %ld, socket %u\n", rte_lcore_id(), pipeline_idx, rte_socket_id());
@@ -423,12 +415,12 @@ static int rx_core(void *arg)
 		ngraph = (ngraph+1)%N_GRAPHS;
 	}
 
-	while (ACCESS_ONCE(force_quit) == 0 && ACCESS_ONCE(p_v->pipeline_force_quit) == 0)
+	while (RTE_GPU_VOLATILE(force_quit) == 0 && RTE_GPU_VOLATILE(p_v->pipeline_force_quit) == 0)
 	{
-		if(ACCESS_ONCE(blist[bindex].status) != BURST_FREE)
+		if(RTE_GPU_VOLATILE(p_v->comm_list[bindex].status) != RTE_GPU_COMM_LIST_FREE)
 		{
 			fprintf(stderr, "Burst %d is not free. Pipeline it's too slow, quitting...\n", bindex);
-			ACCESS_ONCE(force_quit) = 1;
+			RTE_GPU_VOLATILE(force_quit) = 1;
 			return -1;
 		}
 
@@ -436,14 +428,13 @@ static int rx_core(void *arg)
 
 		nb_rx = 0;
 		while (
-				ACCESS_ONCE(force_quit) == 0				&&
-				ACCESS_ONCE(p_v->pipeline_force_quit) == 0	&&
+				RTE_GPU_VOLATILE(force_quit) == 0				&&
+				RTE_GPU_VOLATILE(p_v->pipeline_force_quit) == 0	&&
 				nb_rx < (conf_pkt_burst_size - GAP_PKTS)
 		)
 		{
 			nb_rx += rte_eth_rx_burst(conf_port_id, pipeline_idx, 
-										&(blist[bindex].mbufs[nb_rx]),
-										(conf_pkt_burst_size - nb_rx));
+					&(rx_mbufs[nb_rx]), (conf_pkt_burst_size - nb_rx));
 		}
 
 		POP_RANGE;
@@ -454,17 +445,14 @@ static int rx_core(void *arg)
 		p_v->rx_pkts += nb_rx;
 
 		/* Activate RX timer after receiving first packets */
-		if(p_v->start_rx_measure == false)
-		{
-			if(conf_performance_packets > 0 && p_v->rx_pkts >= conf_warmup_packets)
-			{
+		if (p_v->start_rx_measure == false) {
+			if (conf_performance_packets > 0 && p_v->rx_pkts >= conf_warmup_packets) {
 				p_v->rx_pkts = 0;
 				p_v->start_rx_measure = true;
 				p_v->start_rx_core = Time::nowNs();
 			}
 
-			if(conf_performance_packets == 0)
-			{
+			if (conf_performance_packets == 0) {
 				p_v->start_rx_measure = true;
 				p_v->start_rx_core = Time::nowNs();
 			}
@@ -472,80 +460,62 @@ static int rx_core(void *arg)
 
 		PUSH_RANGE("prep_pkts", 3);
 
-		blist[bindex].num_mbufs = nb_rx;
-		if (p_v->workload_type != NO_WORKLOAD)
-		{
-			for(int index=0; index < nb_rx; index++)
-			{
-				if(conf_buffer_split)
-				{
-					/*
-					 * Must receive an mbufs with exactly BUFFER_SPLIT_NB_SEGS segments
-					 */
-					if(blist[bindex].mbufs[index]->nb_segs != BUFFER_SPLIT_NB_SEGS)
-						rte_exit(EXIT_FAILURE, "Buffer split enabled but can't receive mbufs with %d segments\n", BUFFER_SPLIT_NB_SEGS);
+		rte_wmb();
+		rte_gpu_comm_populate_list_pkts(&(p_v->comm_list[bindex]), rx_mbufs, nb_rx);
 
-					/* 
-					 * Do MAC swap onto the CPU to simulate some CPU decisional work.
-					 */
-					struct rte_ether_hdr *eth = (struct rte_ether_hdr *) ((uint8_t *) (rte_pktmbuf_mtod_offset(blist[bindex].mbufs[index], void*, 0)));
-					uint16_t * src_addr = (uint16_t *) (&eth->s_addr);
-					uint16_t * dst_addr = (uint16_t *) (&eth->d_addr);
-					uint16_t temp = dst_addr[0];
-					dst_addr[0] = src_addr[0];
-					src_addr[0] = temp;
-					temp = dst_addr[1];
-					dst_addr[1] = src_addr[1];
-					src_addr[1] = temp;
-					temp = dst_addr[2];
-					dst_addr[2] = src_addr[2];
-					src_addr[2] = temp;
+		if (p_v->workload_type != NO_WORKLOAD && conf_buffer_split) {
+			for (int index=0; index < nb_rx; index++) {
+				/*
+				 * Must receive an mbufs with exactly BUFFER_SPLIT_NB_SEGS segments
+				 */
+				if(p_v->comm_list[bindex].mbufs[index]->nb_segs != BUFFER_SPLIT_NB_SEGS)
+					rte_exit(EXIT_FAILURE, "Buffer split enabled but can't receive mbufs with %d segments\n", BUFFER_SPLIT_NB_SEGS);
+
+				/* 
+				 * Do MAC swap onto the CPU to simulate some CPU decisional work.
+				 */
+				struct rte_ether_hdr *eth = (struct rte_ether_hdr *) ((uint8_t *) (rte_pktmbuf_mtod_offset(p_v->comm_list[bindex].mbufs[index], void*, 0)));
+				uint16_t * src_addr = (uint16_t *) (&eth->src_addr);
+				uint16_t * dst_addr = (uint16_t *) (&eth->dst_addr);
+				uint16_t temp = dst_addr[0];
+				dst_addr[0] = src_addr[0];
+				src_addr[0] = temp;
+				temp = dst_addr[1];
+				dst_addr[1] = src_addr[1];
+				src_addr[1] = temp;
+				temp = dst_addr[2];
+				dst_addr[2] = src_addr[2];
+				src_addr[2] = temp;
 #ifdef DEBUG_PRINT
-					uint8_t *src = (uint8_t *) (&eth->s_addr);
-					uint8_t *dst = (uint8_t *) (&eth->d_addr);
-					fprintf
-						(stderr, "#%d, mbuf_addr=%lx, Source: %02x:%02x:%02x:%02x:%02x:%02x Dest: %02x:%02x:%02x:%02x:%02x:%02x\n",
-							index, ((uint8_t *) (rte_pktmbuf_mtod_offset(blist[bindex].mbufs[index], void*, 0))), 
-							src[0], src[1], src[2], src[3], src[4], src[5],
-							dst[0], dst[1], dst[2], dst[3], dst[4], dst[5]
-						);
+				uint8_t *src = (uint8_t *) (&eth->src_addr);
+				uint8_t *dst = (uint8_t *) (&eth->dst_addr);
+				fprintf
+					(stderr, "#%d, mbuf_addr=%lx, Source: %02x:%02x:%02x:%02x:%02x:%02x Dest: %02x:%02x:%02x:%02x:%02x:%02x\n",
+						index, ((uint8_t *) (rte_pktmbuf_mtod_offset(p_v->comm_list[bindex].mbufs[index], void*, 0))), 
+						src[0], src[1], src[2], src[3], src[4], src[5],
+						dst[0], dst[1], dst[2], dst[3], dst[4], dst[5]
+					);
 #endif
-					/*
-					 * Buffer provided to the GPU kernel is the second mbuf (segment) which resides in GPU memory
-					 * GPU will still do the MAC swap of some bytes in the payload.
-					 */
-					blist[bindex].addr[index] 	= (uintptr_t) rte_pktmbuf_mtod_offset(blist[bindex].mbufs[index]->next, void*, 0);
-					blist[bindex].len[index] 	= blist[bindex].mbufs[index]->next->data_len;
-				}
-				else
-				{
-					blist[bindex].addr[index] 	= (uintptr_t) rte_pktmbuf_mtod_offset(blist[bindex].mbufs[index], void*, 0);
-					blist[bindex].len[index] 	= blist[bindex].mbufs[index]->data_len;
-				}
-
-				blist[bindex].bytes 		+= blist[bindex].mbufs[index]->pkt_len;
+				/*
+				 * Buffer provided to the GPU kernel is the second mbuf (segment) which resides in GPU memory
+				 * GPU will still do the MAC swap of some bytes in the payload.
+				 */
+				p_v->comm_list[bindex].pkt_list[index].addr = (uintptr_t) rte_pktmbuf_mtod_offset(p_v->comm_list[bindex].mbufs[index]->next, void*, 0);
+				p_v->comm_list[bindex].pkt_list[index].size = p_v->comm_list[bindex].mbufs[index]->next->data_len;
 			}
-
-			rte_wmb();
 		}
+
+		rte_wmb();
 
 		POP_RANGE;
 
-		if (workload_with_gpu(p_v->workload_type))
-			ACCESS_ONCE(blist[bindex].status) = BURST_READY;
-		else
-			ACCESS_ONCE(blist[bindex].status) = BURST_DONE;
-
-		rte_wmb();
 
 		if (p_v->workload_type == GPU_PK_WORKLOAD || p_v->workload_type == GPU_GRAPHS_WORKLOAD) {
 			PUSH_RANGE("signal_pk", 4);
 
-			ret = ACCESS_ONCE(((uint32_t*)flush_h)[0]);
+			RTE_GPU_VOLATILE(((uint32_t*)(p_v->notify_kernel_list.ready_h))[bindex]) = RTE_GPU_COMM_LIST_READY;
 			rte_mb();
-			ACCESS_ONCE(((uint32_t*)(p_v->notify_kernel_list.ready_h))[bindex]) = BURST_READY;
-			rte_mb();
-			ret = ACCESS_ONCE(((uint32_t*)flush_h)[0]);
+			rte_gpu_wmb(conf_gpu_id);
 
 			POP_RANGE;
 
@@ -562,18 +532,17 @@ static int rx_core(void *arg)
 			}
 		} else if (p_v->workload_type == GPU_WORKLOAD) {
 			PUSH_RANGE("macswap_gpu", 4);
-			workload_launch_gpu_processing(
-								blist[bindex].addr, blist[bindex].num_mbufs, &(blist[bindex].status), conf_pktime_ns,
-								MAC_CUDA_BLOCKS, MAC_THREADS_BLOCK, p_v->c_stream
-							);
+			workload_launch_gpu_processing(&(p_v->comm_list[bindex]), conf_pktime_ns,
+								MAC_CUDA_BLOCKS, MAC_THREADS_BLOCK, p_v->c_stream);
 			POP_RANGE;
-		}
+		} else if (p_v->workload_type == NO_WORKLOAD)
+			p_v->comm_list[bindex].status = RTE_GPU_COMM_LIST_DONE;
 
 		if(p_v->start_rx_measure == true && conf_performance_packets > 0 && p_v->rx_pkts >= conf_performance_packets)
 		{
 			printf("Closing RX core (%ld), received packets = %ld\n", pipeline_idx, p_v->rx_pkts);
 			fflush(stdout);
-			ACCESS_ONCE(p_v->pipeline_force_quit) = 1;
+			RTE_GPU_VOLATILE(p_v->pipeline_force_quit) = 1;
 			break;
 		}
 
@@ -594,26 +563,24 @@ static int tx_core(void *arg)
 	int nb_tx = 0, bindex = 0, nbytes = 0;
 	Pipeline * p_v;
 	p_v = pipeline_v[pipeline_idx];
-	struct burst_item * blist = p_v->burst_list;
-	uint8_t flush_value = 0;
 
 	printf("Starting TX Core %u on queue %ld, socket %u\n", rte_lcore_id(), pipeline_idx, rte_socket_id());
 
 	if (workload_with_gpu(p_v->workload_type))
 		CUDA_CHECK(cudaSetDevice(conf_gpu_id));
 
-	while(ACCESS_ONCE(force_quit) == 0 && ACCESS_ONCE(p_v->pipeline_force_quit) == 0)
+	while(RTE_GPU_VOLATILE(force_quit) == 0 && RTE_GPU_VOLATILE(p_v->pipeline_force_quit) == 0)
 	{
 		PUSH_RANGE("wait_burst", 7);
 		while(
-				ACCESS_ONCE(force_quit) == 0 						&& 
-				ACCESS_ONCE(p_v->pipeline_force_quit) == 0 	&&
-				ACCESS_ONCE(blist[bindex].status) != BURST_DONE
+				RTE_GPU_VOLATILE(force_quit) == 0				&& 
+				RTE_GPU_VOLATILE(p_v->pipeline_force_quit) == 0 &&
+				RTE_GPU_VOLATILE(p_v->comm_list[bindex].status) != RTE_GPU_COMM_LIST_DONE
 			);
 		rte_rmb(); //Avoid prediction
 		POP_RANGE;
 
-		p_v->tx_pkts += blist[bindex].num_mbufs;
+		p_v->tx_pkts += p_v->comm_list[bindex].num_pkts;
 
 		/* Activate RX timer after receiving first packets */
 		if(p_v->start_tx_measure == false)
@@ -634,36 +601,38 @@ static int tx_core(void *arg)
 
 		if (p_v->workload_type == CPU_WORKLOAD) {
 			PUSH_RANGE("work_cpu", 7);
-			workload_macswap_cpu(blist[bindex].addr, blist[bindex].num_mbufs, conf_pktime_ns);
+			workload_macswap_cpu(p_v->comm_list[bindex].pkt_list,
+								p_v->comm_list[bindex].num_pkts, conf_pktime_ns);
 			POP_RANGE;
 		}
 
 		PUSH_RANGE("rte_eth_tx_burst", 8);
 		nb_tx = 0;
 		while(
-			ACCESS_ONCE(force_quit) == 0 				&&
-			ACCESS_ONCE(p_v->pipeline_force_quit) == 0 	&&
-			nb_tx < blist[bindex].num_mbufs
+			RTE_GPU_VOLATILE(force_quit) == 0				&&
+			RTE_GPU_VOLATILE(p_v->pipeline_force_quit) == 0 &&
+			nb_tx < p_v->comm_list[bindex].num_pkts
 		) {
 			nb_tx += rte_eth_tx_burst(conf_port_id, pipeline_idx,
-										&(blist[bindex].mbufs[nb_tx]),
-										blist[bindex].num_mbufs - nb_tx);
+										&(p_v->comm_list[bindex].mbufs[nb_tx]),
+										p_v->comm_list[bindex].num_pkts - nb_tx);
 		}
 		rte_wmb();
 		POP_RANGE;
 
-		if(p_v->start_tx_measure == true && conf_performance_packets > 0 && p_v->tx_pkts >= conf_performance_packets)
+		if(p_v->start_tx_measure == true	&&
+			conf_performance_packets > 0	&&
+			p_v->tx_pkts >= conf_performance_packets)
 		{
 			printf("Closing TX core (%ld), received packets = %ld\n", pipeline_idx, p_v->tx_pkts);
 			fflush(stdout);
 			break;
 		}
 
-		ACCESS_ONCE(blist[bindex].num_mbufs) 											= 0;
-		ACCESS_ONCE(blist[bindex].bytes)												= 0;
-		ACCESS_ONCE(blist[bindex].status)												= BURST_FREE;
+		RTE_GPU_VOLATILE(p_v->comm_list[bindex].num_pkts) = 0;
+		RTE_GPU_VOLATILE(p_v->comm_list[bindex].status) = RTE_GPU_COMM_LIST_FREE;
 		if (p_v->workload_type == GPU_PK_WORKLOAD || p_v->workload_type == GPU_GRAPHS_WORKLOAD)
-			ACCESS_ONCE(((uint32_t*)(p_v->notify_kernel_list.ready_h))[bindex]) 	= BURST_FREE;
+			RTE_GPU_VOLATILE(((uint32_t*)(p_v->notify_kernel_list.ready_h))[bindex]) = RTE_GPU_COMM_LIST_FREE;
 		rte_mb();
 
 		bindex = (bindex+1) % MAX_BURSTS_X_QUEUE;
@@ -681,7 +650,7 @@ static void signal_handler(int signum)
 {
 	if (signum == SIGINT || signum == SIGTERM || signum == SIGUSR1) {
 		printf("\n\nSignal %d received, preparing to exit...\n", signum);
-		ACCESS_ONCE(force_quit) = 1;
+		RTE_GPU_VOLATILE(force_quit) = 1;
 	}
 }
 
@@ -691,9 +660,11 @@ static void signal_handler(int signum)
 int main(int argc, char **argv)
 {
 	struct rte_eth_dev_info dev_info;
+	struct rte_gpu_info ginfo;
 	uint8_t socketid;
 	int ret = 0, index_q, index_queue = 0, secondary_id = 0;
-	uint16_t nb_ports;
+	uint16_t nb_ports, nb_gpus;
+	int gpu_idx = 0;
 	unsigned lcore_id;
 	long icore = 0;
 	uint16_t nb_rxd = RX_DESC_DEFAULT;
@@ -727,7 +698,7 @@ int main(int argc, char **argv)
 		rte_exit(EXIT_FAILURE, "Invalid NVL2FWD arguments\n");
 
 	/* ================ FORCE QUIT HANDLER ================ */
-	ACCESS_ONCE(force_quit) = 0;
+	RTE_GPU_VOLATILE(force_quit) = 0;
 	signal(SIGINT, signal_handler);
 	signal(SIGTERM, signal_handler);
 	signal(SIGUSR1, signal_handler);
@@ -742,12 +713,38 @@ int main(int argc, char **argv)
 	if (nb_ports == 0)
 		rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
 
-	rte_eth_dev_info_get(conf_port_id, &dev_info);
+	ret = rte_eth_dev_info_get(conf_port_id, &dev_info);
+	if (ret != 0)
+		rte_exit(EXIT_FAILURE,
+			"Failed to get device info for port %d\n",
+			conf_port_id);
+
 	printf("\nDevice driver name in use: %s... \n", dev_info.driver_name);
 
 	if (strcmp(dev_info.driver_name, "mlx5_pci") != 0)
 		rte_exit(EXIT_FAILURE, "Non-Mellanox NICs have not been validated in l2fwd-nv\n");
 		// conf_eth_port.rx_adv_conf.rss_conf.rss_hf = ETH_RSS_IP;
+
+	nb_gpus = rte_gpu_count_avail();
+	printf("\n\nDPDK found %d GPUs:\n", nb_gpus);
+	RTE_GPU_FOREACH(gpu_idx)
+	{
+		if(rte_gpu_info_get(gpu_idx, &ginfo))
+			rte_exit(EXIT_FAILURE, "rte_gpu_info_get error - bye\n");
+
+		printf("\tGPU ID %d\n\t\tparent ID %d GPU Bus ID %s NUMA node %d Tot memory %.02f MB, Tot processors %d\n",
+				ginfo.dev_id,
+				ginfo.parent,
+				ginfo.name,
+				ginfo.numa_node,
+				(((float)ginfo.total_memory)/(float)1024)/(float)1024,
+				ginfo.processor_count
+			);
+	}
+	printf("\n\n");
+
+	if(nb_gpus == 0 || nb_gpus < conf_gpu_id)
+		rte_exit(EXIT_FAILURE, "Error nb_gpus %d gpu_id %d\n", nb_gpus, conf_gpu_id);
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//// MEMPOOLS
@@ -757,29 +754,28 @@ int main(int argc, char **argv)
 
 	if (conf_mem_type == MEM_HOST_PINNED) {
 		ext_mem.buf_ptr = rte_malloc("extmem", ext_mem.buf_len, 0);
-		CUDA_CHECK(cudaHostRegister(ext_mem.buf_ptr, ext_mem.buf_len, cudaHostRegisterMapped));
-		void *pDevice;
-		CUDA_CHECK(cudaHostGetDevicePointer(&pDevice, ext_mem.buf_ptr, 0));
-		if (pDevice != ext_mem.buf_ptr)
-			rte_exit(EXIT_FAILURE, "GPU pointer does not match CPU pointer\n");
+		if (ext_mem.buf_ptr == NULL)
+			rte_exit(EXIT_FAILURE, "Could not allocate CPU DPDK memory\n");
+
+		ret = rte_gpu_mem_register(conf_gpu_id, ext_mem.buf_len, ext_mem.buf_ptr);
+		if(ret < 0)
+			rte_exit(EXIT_FAILURE, "Unable to gpudev register addr 0x%p, ret %d\n", ext_mem.buf_ptr, ret);
 	} else {
 		ext_mem.buf_iova = RTE_BAD_IOVA;
-		CUDA_CHECK(cudaMalloc(&ext_mem.buf_ptr, ext_mem.buf_len));
-		if (ext_mem.buf_ptr == NULL)
-			rte_exit(EXIT_FAILURE, "Could not allocate GPU memory\n");
 
-		unsigned int flag = 1;
-		CUresult status = cuPointerSetAttribute(&flag, CU_POINTER_ATTRIBUTE_SYNC_MEMOPS, (CUdeviceptr)ext_mem.buf_ptr);
-		if (CUDA_SUCCESS != status) {
-			rte_exit(EXIT_FAILURE, "Could not set SYNC MEMOP attribute for GPU memory at %llx\n", (CUdeviceptr)ext_mem.buf_ptr);
-		}
+		ext_mem.buf_ptr = rte_gpu_mem_alloc(conf_gpu_id, ext_mem.buf_len);
+		if (ext_mem.buf_ptr == NULL)
+			rte_exit(EXIT_FAILURE, "Could not allocate GPU device memory\n");
+
 		ret = rte_extmem_register(ext_mem.buf_ptr, ext_mem.buf_len, NULL, ext_mem.buf_iova, GPU_PAGE_SIZE);
 		if (ret)
-			rte_exit(EXIT_FAILURE, "Could not register GPU memory\n");
+			rte_exit(EXIT_FAILURE, "Unable to register addr 0x%p, ret %d\n", ext_mem.buf_ptr, ret);
 	}
-	ret = rte_dev_dma_map(rte_eth_devices[conf_port_id].device, ext_mem.buf_ptr, ext_mem.buf_iova, ext_mem.buf_len);
+
+	ret = rte_dev_dma_map(dev_info.device, ext_mem.buf_ptr, ext_mem.buf_iova, ext_mem.buf_len);
 	if (ret)
 		rte_exit(EXIT_FAILURE, "Could not DMA map EXT memory\n");
+
 	mpool_payload = rte_pktmbuf_pool_create_extbuf("payload_mpool", conf_nb_mbufs,
 											0, 0, ext_mem.elt_size, 
 											rte_socket_id(), &ext_mem, 1);
@@ -815,8 +811,6 @@ int main(int argc, char **argv)
 		conf_eth_port.rxmode.offloads = DEV_RX_OFFLOAD_SCATTER | RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT;
 		conf_eth_port.txmode.offloads = DEV_TX_OFFLOAD_MULTI_SEGS;
 	}
-	else
-		conf_eth_port.rxmode.offloads = DEV_RX_OFFLOAD_JUMBO_FRAME;
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//// PORT 0 SETUP
@@ -896,22 +890,12 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	if (0 != gdrcopy_alloc_pin(
-								&(gdr_descr),
-								&(flush_mh), &(flush_d), &(flush_h),
-								&(flush_free), &(flush_size),
-								sizeof(uint32_t))
-	){
-		fprintf(stderr, "gdrcopy_alloc_pin flush failed\n");
-		exit(EXIT_FAILURE);
-	}
-
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//// BURST QUEUE PER PIPELINE
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	pipeline_v.reserve(conf_num_pipelines);
 	for(int index_p = 0; index_p < conf_num_pipelines; index_p++)
-		pipeline_v[index_p] = new Pipeline(index_p, conf_workload, conf_pktime_ns, &gdr_descr, index_p, index_p);
+		pipeline_v[index_p] = new Pipeline(index_p, conf_workload, conf_pktime_ns, &gdr_descr, index_p, index_p, conf_gpu_id);
 
 	if (conf_nvprofiler)
 		cudaProfilerStart();
@@ -939,7 +923,7 @@ int main(int argc, char **argv)
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	main_start = Time::nowNs();
 	icore = 0;
-	RTE_LCORE_FOREACH_SLAVE(icore) {
+	RTE_LCORE_FOREACH_WORKER(icore) {
 		if (rte_eal_wait_lcore(icore) < 0) {
 			fprintf(stderr, "bad exit for coreid: %ld\n",
 				icore);
@@ -971,6 +955,20 @@ int main(int argc, char **argv)
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	pipeline_v.clear();
 	gdr_close(gdr_descr);
+
+	ret = rte_dev_dma_unmap(dev_info.device, ext_mem.buf_ptr, ext_mem.buf_iova, ext_mem.buf_len);
+	if (ret)
+		rte_exit(EXIT_FAILURE, "Could not DMA unmap EXT memory\n");
+
+	if (conf_mem_type == MEM_HOST_PINNED) {
+		ret = rte_gpu_mem_unregister(conf_gpu_id, ext_mem.buf_ptr);
+		if(ret < 0)
+			rte_exit(EXIT_FAILURE, "rte_gpu_mem_unregister returned error %d\n", ret);
+	} else {
+		ret = rte_gpu_mem_free(conf_gpu_id, ext_mem.buf_ptr);
+		if(ret < 0)
+			rte_exit(EXIT_FAILURE, "rte_gpu_mem_free returned error %d\n", ret);
+	}
 
 	printf("Bye!\n");
 

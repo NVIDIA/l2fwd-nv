@@ -67,6 +67,7 @@
 #include <rte_metrics.h>
 #include <rte_bitrate.h>
 #include <rte_latencystats.h>
+#include <rte_gpudev.h>
 
 ///////////////////////////////////////////////////////////////////////////
 //// Local headers
@@ -98,12 +99,6 @@ struct port_statistics {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////
-// Memory structures
-/////////////////////////////////////////////////////////////////
-int create_burst_list(struct burst_item ** _blist);
-int destroy_burst_list(struct burst_item ** _blist);
-
-/////////////////////////////////////////////////////////////////
 // GDRCopy
 /////////////////////////////////////////////////////////////////
 int gdrcopy_alloc_pin(
@@ -124,15 +119,15 @@ void gdrcopy_cleanup(gdr_t      g,
 /////////////////////////////////////////////////////////////////
 // Workload
 /////////////////////////////////////////////////////////////////
-void workload_macswap_cpu(uintptr_t * addr, int nmbuf, uint64_t wtime_ns);
+void workload_macswap_cpu(struct rte_gpu_comm_pkt * pkt_list, int nmbuf, uint64_t wtime_ns);
 
-void workload_launch_gpu_processing(uintptr_t * addr, int num, uint32_t * status, uint64_t wtime_n,
-                                  int cuda_blocks, int cuda_threads, cudaStream_t stream);
+void workload_launch_gpu_processing(struct rte_gpu_comm_list * comm_list, uint64_t wtime_n,
+							int cuda_blocks, int cuda_threads, cudaStream_t stream);
 
-void workload_launch_persistent_gpu_processing(struct burst_item * bitem_list, uint32_t * wait_list_d, uint64_t wtime_n,
-                                              int cuda_blocks, int cuda_threads, cudaStream_t stream);
+void workload_launch_persistent_gpu_processing(struct rte_gpu_comm_list * comm_item_list, uint32_t * wait_list_d, uint64_t wtime_n,
+                            int cuda_blocks, int cuda_threads, cudaStream_t stream);
 
-void workload_launch_gpu_graph_processing(struct burst_item * bitem,  uint32_t * wait_list_d, uint64_t wtime_n,
+void workload_launch_gpu_graph_processing(struct rte_gpu_comm_list * comm_item,  uint32_t * wait_list_d, uint64_t wtime_n,
 										int cuda_blocks, int cuda_threads, cudaStream_t stream);
 
 /////////////////////////////////////////////////////////////////

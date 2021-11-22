@@ -86,7 +86,7 @@ void wait_until_ns(uint64_t end_t)
 }
 
 /* ================== WORKLOAD ================== */
-void workload_macswap_cpu(uintptr_t * addr, int nmbuf, uint64_t wtime_ns)
+void workload_macswap_cpu(struct rte_gpu_comm_pkt * pkt_list, int nmbuf, uint64_t wtime_ns)
 {
 	struct rte_ether_hdr *eth;
 	uint8_t *data_ptr;
@@ -95,7 +95,7 @@ void workload_macswap_cpu(uintptr_t * addr, int nmbuf, uint64_t wtime_ns)
 	int i = 0;
 	uint64_t start;
 
-	if (addr == NULL || nmbuf <= 0)
+	if (pkt_list == NULL || nmbuf <= 0)
 		return;
 
 	for (i = 0; i < nmbuf; i++) {
@@ -103,13 +103,13 @@ void workload_macswap_cpu(uintptr_t * addr, int nmbuf, uint64_t wtime_ns)
 		if(wtime_ns)
 			start = get_timestamp_ns();
 
-		eth = (struct rte_ether_hdr *) (uint8_t *) addr[i];
-		src_addr = (uint16_t *) (&eth->s_addr);
-		dst_addr = (uint16_t *) (&eth->d_addr);
+		eth = (struct rte_ether_hdr *) (uint8_t *) pkt_list[i].addr;
+		src_addr = (uint16_t *) (&eth->src_addr);
+		dst_addr = (uint16_t *) (&eth->dst_addr);
 
 #ifdef DEBUG_PRINT
-		uint8_t *src = (uint8_t *) (&eth->s_addr);
-		uint8_t *dst = (uint8_t *) (&eth->d_addr);
+		uint8_t *src = (uint8_t *) (&eth->src_addr);
+		uint8_t *dst = (uint8_t *) (&eth->dst_addr);
 		printf
 		    ("#%d, mbuf_addr=%lx, Source: %02x:%02x:%02x:%02x:%02x:%02x Dest: %02x:%02x:%02x:%02x:%02x:%02x\n",
 		     i, addr[i], src[0], src[1], src[2], src[3], src[4], src[5],

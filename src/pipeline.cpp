@@ -16,25 +16,25 @@
 
 #include "pipeline.h"
 
-Pipeline::Pipeline(int _index, int _workload_type, int _pkt_time_ns, gdr_t * _gdr_descr, int _rx_queue, int _tx_queue)
+Pipeline::Pipeline(int _index,
+					int _workload_type,
+					int _pkt_time_ns,
+					gdr_t * _gdr_descr,
+					int _rx_queue,
+					int _tx_queue,
+					int _gpu_id)
 					:
-					index(_index), workload_type(_workload_type), pkt_time_ns(_pkt_time_ns), gdr_descr(_gdr_descr), rx_queue(_rx_queue), tx_queue(_tx_queue)
+					index(_index),
+					workload_type(_workload_type),
+					pkt_time_ns(_pkt_time_ns),
+					gdr_descr(_gdr_descr),
+					rx_queue(_rx_queue),
+					tx_queue(_tx_queue),
+					gpu_id(_gpu_id)
 {
-	/* BURST LIST */
-	CUDA_CHECK(cudaMallocHost((void**)&burst_list, MAX_BURSTS_X_QUEUE * sizeof(struct burst_item)));
-	
-	for(int bindex = 0; bindex < MAX_BURSTS_X_QUEUE; bindex++)
-	{
-		burst_list[bindex].bytes 			= 0;
-		burst_list[bindex].num_mbufs 		= 0;
-		burst_list[bindex].status 			= BURST_FREE;
-
-		for(int index = 0; index < MAX_MBUFS_BURST; index++)
-		{
-			burst_list[bindex].addr[index] 	= 0;
-			burst_list[bindex].len[index] 	= 0;
-		}
-	}
+	comm_list = rte_gpu_comm_create_list(gpu_id, MAX_BURSTS_X_QUEUE);
+	if(comm_list == NULL)
+		rte_panic("rte_gpu_comm_create_list");
 
 	start_rx_measure = false;
 	start_tx_measure = false;
@@ -70,14 +70,14 @@ Pipeline::Pipeline(int _index, int _workload_type, int _pkt_time_ns, gdr_t * _gd
 		}
 
 		for (int index_item = 0; index_item < MAX_BURSTS_X_QUEUE; index_item++)
-			ACCESS_ONCE(((uint32_t*)(notify_kernel_list.ready_h))[index_item]) = BURST_FREE;			
+			RTE_GPU_VOLATILE(((uint32_t*)(notify_kernel_list.ready_h))[index_item]) = BURST_FREE;			
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		//// ONE CUDA KERNEL PER PIPELINE
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		if(workload_type == GPU_PK_WORKLOAD)
 		{
-			workload_launch_persistent_gpu_processing(burst_list, (uint32_t*)(notify_kernel_list.ready_d),
+			workload_launch_persistent_gpu_processing(comm_list, (uint32_t*)(notify_kernel_list.ready_d),
 												pkt_time_ns,
 												PK_CUDA_BLOCKS, PK_CUDA_THREADS, c_stream);
 		}
@@ -93,7 +93,7 @@ Pipeline::Pipeline(int _index, int _workload_type, int _pkt_time_ns, gdr_t * _gd
 				for(int index_b = index_g*GRAPH_BURST; index_b < ((index_g+1)*GRAPH_BURST); index_b++)
 				{
 					workload_launch_gpu_graph_processing(
-								&(burst_list[index_b]), &(((uint32_t*)(notify_kernel_list.ready_d))[index_b]),
+								&(comm_list[index_b]), &(((uint32_t*)(notify_kernel_list.ready_d))[index_b]),
 								pkt_time_ns, 
 								MAC_CUDA_BLOCKS, MAC_THREADS_BLOCK, c_stream
 							);
@@ -106,12 +106,12 @@ Pipeline::Pipeline(int _index, int _workload_type, int _pkt_time_ns, gdr_t * _gd
 }
 
 Pipeline::~Pipeline() {
-	
-	cudaFreeHost(burst_list);
 
 	if(workload_type >= GPU_WORKLOAD)
 		cudaStreamDestroy(c_stream);
 	
+	rte_gpu_comm_destroy_list(comm_list, MAX_BURSTS_X_QUEUE);
+
 	if (workload_type >= GPU_PK_WORKLOAD)
 		gdrcopy_cleanup(
 							*gdr_descr,
@@ -136,8 +136,10 @@ void Pipeline::terminateWorkload() {
 	if(workload_type == GPU_PK_WORKLOAD)
 	{
 		printf("Killing persistent kernel...\n");
-		for (int index_item = 0; index_item < MAX_BURSTS_X_QUEUE; index_item++)
-			ACCESS_ONCE(((uint32_t*)(notify_kernel_list.ready_h))[index_item]) = BURST_EXIT;
+		for (int index_item = 0; index_item < MAX_BURSTS_X_QUEUE; index_item++) {
+			RTE_GPU_VOLATILE(comm_list[index_item].status) = RTE_GPU_COMM_LIST_ERROR;
+			RTE_GPU_VOLATILE(((uint32_t*)(notify_kernel_list.ready_h))[index_item]) = RTE_GPU_COMM_LIST_ERROR;
+		}
 
 		CUDA_CHECK(cudaStreamSynchronize(c_stream));
 	}
