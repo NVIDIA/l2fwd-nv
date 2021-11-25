@@ -43,8 +43,8 @@ static constexpr uint32_t BURST_EXIT =                      3;
 /*
  * Configurable number of RX/TX ring descriptors
  */
-static constexpr uint32_t RX_DESC_DEFAULT = 				256;
-static constexpr uint32_t TX_DESC_DEFAULT = 				256;
+static constexpr uint32_t RX_DESC_DEFAULT = 				1024;
+static constexpr uint32_t TX_DESC_DEFAULT = 				1024;
 static constexpr uint32_t MAX_CORES =                       16;
 static constexpr uint32_t MAX_PIPELINES =					8;
 static constexpr uint32_t MAX_RX_QUEUE_PER_LCORE =          (MAX_CORES / 2);
