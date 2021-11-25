@@ -186,27 +186,26 @@ void print_opts(void)
 	cudaError_t cuda_ret;
 	struct cudaDeviceProp deviceProp;
 
-	printf("============== INPUT OPTIONS ==============\n");
-	printf("NV Mempool memory type = %s\n", (conf_mem_type == MEM_HOST_PINNED ? "Host pinned memory" : "Device memory"));
+	printf("============== Configuration ==============\n");
+	printf("NV Mempool memory type = %s\n", (conf_mem_type == MEM_HOST_PINNED ? "CPU pinned memory" : "GPU memory"));
 	printf("RX/TX queues = %d, Mempools x queue = 1\n", conf_num_pipelines);
-	printf("Mbuf payload size = %d\n", conf_data_room_size);
-	printf("mbufs per mempool = %d\n", conf_nb_mbufs);
+	printf("Mbuf data room size = %d\n", conf_data_room_size);
+	printf("bufs per mempool = %d\n", conf_nb_mbufs);
 	printf("Pipelines = %d (%d RX cores and %d TX cores)\n", conf_num_pipelines, conf_num_pipelines, conf_num_pipelines);
 
 	if (conf_workload == NO_WORKLOAD)
-		printf("Workload type = NO_WORKLOAD\n");
+		printf("Workload type = No workload\n");
 	else
 	{
 		if (conf_workload == CPU_WORKLOAD)
-			printf("Workload type = CPU_WORKLOAD\n");
+			printf("Workload type = CPU\n");
 		if (conf_workload == GPU_WORKLOAD)
-			printf("Workload type = GPU_WORKLOAD\n");
+			printf("Workload type = GPU Regular kernel\n");
 		if (conf_workload == GPU_PK_WORKLOAD)
-			printf("Workload type = GPU_PK_WORKLOAD\n");
+			printf("Workload type = GPU Persistent kernel\n");
 		if (conf_workload == GPU_GRAPHS_WORKLOAD)
-			printf("Workload type = GPU_GRAPHS_WORKLOAD\n");
-		if (workload_with_gpu(conf_workload) || conf_mem_type == MEM_DEVMEM)
-		{
+			printf("Workload type = GPU CUDA Graphs kernel\n");
+		if (workload_with_gpu(conf_workload) || conf_mem_type == MEM_DEVMEM) {
 			CUDA_CHECK(cudaSetDevice(conf_gpu_id));
 			cuda_ret = cudaGetDeviceProperties(&deviceProp, conf_gpu_id);
 			if (cuda_ret != cudaSuccess)
@@ -220,14 +219,14 @@ void print_opts(void)
 		printf("Per packet forced time = %lu ns\n", conf_pktime_ns);		
 	}
 	
-	printf("Device port number = %d\n", conf_port_id);
-	printf("RX pkts x burst = %d\n", conf_pkt_burst_size);
+	printf("NIC port number = %d\n", conf_port_id);
+	printf("GPU number = %d\n", conf_gpu_id);
+	printf("Receive packets per burst = %d\n", conf_pkt_burst_size);
 	if (conf_performance_packets > 0)
 		printf("Warmup packets = %d, Performance packets = %d\n",
-		       conf_warmup_packets, conf_performance_packets);
+			conf_warmup_packets, conf_performance_packets);
 	else
-		printf
-		    ("Performance packets = infinite (stop execution with CTRL+C)\n");
+		printf("Performance packets = infinite (stop execution with CTRL+C)\n");
 
 	printf("NVTX profiler enabled = %s\n", (conf_nvprofiler == 1 ? "Yes" : "No"));
 	printf("Buffer split enabled = %s\n", (conf_buffer_split == 1 ? "Yes" : "No"));
@@ -409,16 +408,14 @@ static int rx_core(void *arg)
 	if (workload_with_gpu(p_v->workload_type))
 		CUDA_CHECK(cudaSetDevice(conf_gpu_id));
 
-	if(p_v->workload_type == GPU_GRAPHS_WORKLOAD)
-	{
+	if (p_v->workload_type == GPU_GRAPHS_WORKLOAD) {
 		CUDA_CHECK(cudaGraphLaunch(p_v->winstance[ngraph], p_v->c_stream));
 		ngraph = (ngraph+1)%N_GRAPHS;
 	}
 
-	while (RTE_GPU_VOLATILE(force_quit) == 0 && RTE_GPU_VOLATILE(p_v->pipeline_force_quit) == 0)
-	{
-		if(RTE_GPU_VOLATILE(p_v->comm_list[bindex].status) != RTE_GPU_COMM_LIST_FREE)
-		{
+	while (RTE_GPU_VOLATILE(force_quit) == 0 && RTE_GPU_VOLATILE(p_v->pipeline_force_quit) == 0) {
+
+		if (RTE_GPU_VOLATILE(p_v->comm_list[bindex].status) != RTE_GPU_COMM_LIST_FREE) {
 			fprintf(stderr, "Burst %d is not free. Pipeline it's too slow, quitting...\n", bindex);
 			RTE_GPU_VOLATILE(force_quit) = 1;
 			return -1;
@@ -431,8 +428,7 @@ static int rx_core(void *arg)
 				RTE_GPU_VOLATILE(force_quit) == 0				&&
 				RTE_GPU_VOLATILE(p_v->pipeline_force_quit) == 0	&&
 				nb_rx < (conf_pkt_burst_size - GAP_PKTS)
-		)
-		{
+		) {
 			nb_rx += rte_eth_rx_burst(conf_port_id, pipeline_idx, 
 					&(rx_mbufs[nb_rx]), (conf_pkt_burst_size - nb_rx));
 		}
@@ -509,7 +505,6 @@ static int rx_core(void *arg)
 
 		POP_RANGE;
 
-
 		if (p_v->workload_type == GPU_PK_WORKLOAD || p_v->workload_type == GPU_GRAPHS_WORKLOAD) {
 			PUSH_RANGE("signal_pk", 4);
 
@@ -519,10 +514,8 @@ static int rx_core(void *arg)
 
 			POP_RANGE;
 
-			if(p_v->workload_type == GPU_GRAPHS_WORKLOAD)
-			{
-				if(nburst == (GRAPH_BURST-1))
-				{
+			if (p_v->workload_type == GPU_GRAPHS_WORKLOAD) {
+				if (nburst == (GRAPH_BURST-1)) {
 					CUDA_CHECK(cudaGraphLaunch(p_v->winstance[ngraph], p_v->c_stream));
 					ngraph = (ngraph+1)%N_GRAPHS;
 					nburst = 0;
@@ -538,8 +531,7 @@ static int rx_core(void *arg)
 		} else if (p_v->workload_type == NO_WORKLOAD)
 			p_v->comm_list[bindex].status = RTE_GPU_COMM_LIST_DONE;
 
-		if(p_v->start_rx_measure == true && conf_performance_packets > 0 && p_v->rx_pkts >= conf_performance_packets)
-		{
+		if (p_v->start_rx_measure == true && conf_performance_packets > 0 && p_v->rx_pkts >= conf_performance_packets) {
 			printf("Closing RX core (%ld), received packets = %ld\n", pipeline_idx, p_v->rx_pkts);
 			fflush(stdout);
 			RTE_GPU_VOLATILE(p_v->pipeline_force_quit) = 1;
@@ -569,8 +561,7 @@ static int tx_core(void *arg)
 	if (workload_with_gpu(p_v->workload_type))
 		CUDA_CHECK(cudaSetDevice(conf_gpu_id));
 
-	while(RTE_GPU_VOLATILE(force_quit) == 0 && RTE_GPU_VOLATILE(p_v->pipeline_force_quit) == 0)
-	{
+	while (RTE_GPU_VOLATILE(force_quit) == 0 && RTE_GPU_VOLATILE(p_v->pipeline_force_quit) == 0) {
 		PUSH_RANGE("wait_burst", 7);
 		while(
 				RTE_GPU_VOLATILE(force_quit) == 0				&& 
@@ -583,17 +574,14 @@ static int tx_core(void *arg)
 		p_v->tx_pkts += p_v->comm_list[bindex].num_pkts;
 
 		/* Activate RX timer after receiving first packets */
-		if(p_v->start_tx_measure == false)
-		{
-			if(conf_performance_packets > 0 && p_v->tx_pkts >= conf_warmup_packets)
-			{
+		if (p_v->start_tx_measure == false) {
+			if (conf_performance_packets > 0 && p_v->tx_pkts >= conf_warmup_packets) {
 				p_v->tx_pkts = 0;
 				p_v->start_tx_measure = true;
 				p_v->start_tx_core = Time::nowNs();
 			}
 
-			if(conf_performance_packets == 0)
-			{
+			if(conf_performance_packets == 0) {
 				p_v->start_tx_measure = true;
 				p_v->start_tx_core = Time::nowNs();
 			}
@@ -620,10 +608,10 @@ static int tx_core(void *arg)
 		rte_wmb();
 		POP_RANGE;
 
-		if(p_v->start_tx_measure == true	&&
+		if (p_v->start_tx_measure == true	&&
 			conf_performance_packets > 0	&&
-			p_v->tx_pkts >= conf_performance_packets)
-		{
+			p_v->tx_pkts >= conf_performance_packets) {
+
 			printf("Closing TX core (%ld), received packets = %ld\n", pipeline_idx, p_v->tx_pkts);
 			fflush(stdout);
 			break;

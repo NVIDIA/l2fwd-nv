@@ -122,13 +122,13 @@ void gdrcopy_cleanup(gdr_t      g,
 void workload_macswap_cpu(struct rte_gpu_comm_pkt * pkt_list, int nmbuf, uint64_t wtime_ns);
 
 void workload_launch_gpu_processing(struct rte_gpu_comm_list * comm_list, uint64_t wtime_n,
-							int cuda_blocks, int cuda_threads, cudaStream_t stream);
+		int cuda_blocks, int cuda_threads, cudaStream_t stream);
 
 void workload_launch_persistent_gpu_processing(struct rte_gpu_comm_list * comm_item_list, uint32_t * wait_list_d, uint64_t wtime_n,
-                            int cuda_blocks, int cuda_threads, cudaStream_t stream);
+		int cuda_blocks, int cuda_threads, cudaStream_t stream);
 
 void workload_launch_gpu_graph_processing(struct rte_gpu_comm_list * comm_item,  uint32_t * wait_list_d, uint64_t wtime_n,
-										int cuda_blocks, int cuda_threads, cudaStream_t stream);
+		int cuda_blocks, int cuda_threads, cudaStream_t stream);
 
 /////////////////////////////////////////////////////////////////
 // Command Line Options
