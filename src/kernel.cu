@@ -254,7 +254,7 @@ __global__ void kernel_graphs_mac_update(struct rte_gpu_comm_list * comm_item_li
 		uint8_t *src = (uint8_t *) (&eth->src_addr);
 		uint8_t *dst = (uint8_t *) (&eth->dst_addr);
 		printf
-		    ("Source: %02x:%02x:%02x:%02x:%02x:%02x Dest: %02x:%02x:%02x:%02x:%02x:%02x\n",
+		    ("GRAPHS before Source: %02x:%02x:%02x:%02x:%02x:%02x Dest: %02x:%02x:%02x:%02x:%02x:%02x\n",
 		     src[0], src[1], src[2], src[3], src[4], src[5], dst[0],
 		     dst[1], dst[2], dst[3], dst[4], dst[5]);
 #endif
@@ -274,7 +274,7 @@ __global__ void kernel_graphs_mac_update(struct rte_gpu_comm_list * comm_item_li
 
 #ifdef DEBUG_PRINT
 		/* Code to verify source and dest of ethernet addresses */
-		printf("2 Source: %x:%x:%x:%x:%x:%x Dest: %x:%x:%x:%x:%x:%x\n",
+		printf("GRAPHS after Source: %x:%x:%x:%x:%x:%x Dest: %x:%x:%x:%x:%x:%x\n",
 		       ((uint8_t *) (src_addr))[0], ((uint8_t *) (src_addr))[1],
 		       ((uint8_t *) (src_addr))[2], ((uint8_t *) (src_addr))[3],
 		       ((uint8_t *) (src_addr))[4], ((uint8_t *) (src_addr))[5],

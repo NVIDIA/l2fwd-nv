@@ -133,9 +133,8 @@ Pipeline::~Pipeline() {
 }
 
 void Pipeline::terminateWorkload() {
-	if(workload_type == GPU_PK_WORKLOAD)
-	{
-		printf("Killing persistent kernel...\n");
+	if(workload_type == GPU_PK_WORKLOAD || workload_type == GPU_GRAPHS_WORKLOAD) {
+		printf("Terminating pending CUDA kernels...\n");
 		for (int index_item = 0; index_item < MAX_BURSTS_X_QUEUE; index_item++) {
 			RTE_GPU_VOLATILE(comm_list[index_item].status) = RTE_GPU_COMM_LIST_ERROR;
 			RTE_GPU_VOLATILE(((uint32_t*)(notify_kernel_list.ready_h))[index_item]) = RTE_GPU_COMM_LIST_ERROR;
