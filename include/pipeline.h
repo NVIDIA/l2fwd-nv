@@ -69,42 +69,43 @@ class Time {
 
 class Pipeline {
 
-    public:
-        Pipeline(int _index, int _workload_type, int _pkt_time_ns, gdr_t * _gdr_descr, int _rx_queue, int _tx_queue);
-        ~Pipeline();
-        void terminateWorkload();
+	public:
+		Pipeline(int _index, int _workload_type, int _pkt_time_ns, gdr_t * _gdr_descr, int _rx_queue, int _tx_queue, int _gpu_id);
+		~Pipeline();
+		void terminateWorkload();
 
-        int index;
-        int workload_type;
-        int pkt_time_ns;
-        int rx_queue;
-        int tx_queue;
-        gdr_t * gdr_descr;
-        struct burst_item * burst_list;
-        struct notify_kernel_item notify_kernel_list;
-        cudaStream_t c_stream;
-        // struct burst_item_sync * burst_sync_list;
-        cudaGraph_t wgraph[N_GRAPHS];
-        cudaGraphExec_t winstance[N_GRAPHS];
-        int pipeline_force_quit;
-        int rx_measure;
-        int tx_measure;
+		int index;
+		int gpu_id;
+		int workload_type;
+		int pkt_time_ns;
+		int rx_queue;
+		int tx_queue;
+		gdr_t * gdr_descr;
+		struct rte_gpu_comm_list *comm_list;
+		struct notify_kernel_item notify_kernel_list;
+		cudaStream_t c_stream;
+		// struct burst_item_sync * burst_sync_list;
+		cudaGraph_t wgraph[N_GRAPHS];
+		cudaGraphExec_t winstance[N_GRAPHS];
+		int pipeline_force_quit;
+		int rx_measure;
+		int tx_measure;
 
-        struct timespec temp_rx_start;
-        struct timespec temp_rx_end;
-        struct timespec temp_tx_start;
-        struct timespec temp_tx_end;
+		struct timespec temp_rx_start;
+		struct timespec temp_rx_end;
+		struct timespec temp_tx_start;
+		struct timespec temp_tx_end;
 
-        bool start_rx_measure;
-        bool start_tx_measure;
-        uint64_t rx_pkts;
-        uint64_t tx_pkts;
-        uint64_t rx_bytes;
-        uint64_t tx_bytes;
-        t_ns start_rx_core;
-        t_ns stop_rx_core;
-        t_ns start_tx_core;
-        t_ns stop_tx_core;
+		bool start_rx_measure;
+		bool start_tx_measure;
+		uint64_t rx_pkts;
+		uint64_t tx_pkts;
+		uint64_t rx_bytes;
+		uint64_t tx_bytes;
+		t_ns start_rx_core;
+		t_ns stop_rx_core;
+		t_ns start_tx_core;
+		t_ns stop_tx_core;
 };
 
 

@@ -121,14 +121,10 @@ int gdrcopy_alloc_pin(gdr_t*     pgdr,
 void gdrcopy_cleanup(gdr_t g, CUdeviceptr free_dev_addr, gdr_mh_t gdr_handle, void* host_ptr, size_t alloc_size)
 {
     if(NULL != host_ptr)
-    {
         gdr_unmap(g, gdr_handle, host_ptr, alloc_size);
-    }
 
 	gdr_unpin_buffer(g, gdr_handle);
 
     if(free_dev_addr)
-    {
         cuMemFree(free_dev_addr);
-    }
 }
