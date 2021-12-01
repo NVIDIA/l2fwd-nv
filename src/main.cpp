@@ -72,7 +72,7 @@ static struct rte_eth_conf conf_eth_port = {
 	},
 	.txmode = {
 		.mq_mode = ETH_MQ_TX_NONE,
-		.offloads = 0,
+		.offloads = RTE_ETH_TX_OFFLOAD_MULTI_SEGS,
 	},
 	.rx_adv_conf = {
 		.rss_conf = {
@@ -389,11 +389,6 @@ static int parse_args(int argc, char **argv)
 	if (conf_performance_packets == 0)
 		conf_warmup_packets = 0;
 
-	if(conf_buffer_split && conf_workload == CPU_WORKLOAD) {
-		fprintf(stderr, "Can't enable buffer split with CPU workload\n");
-		return -1;
-	}
-
 	return ret;
 }
 
@@ -484,51 +479,6 @@ static int rx_core(void *arg)
 			return 0;
 		}
 
-		if (conf_buffer_split) {
-			for (int index=0; index < nb_rx; index++) {
-				/*
-				 * Must receive an mbufs with exactly BUFFER_SPLIT_NB_SEGS segments
-				 */
-				if(p_v->comm_list[bindex].mbufs[index]->nb_segs != BUFFER_SPLIT_NB_SEGS)
-					rte_exit(EXIT_FAILURE, "Buffer split enabled but can't receive mbufs with %d segments\n", BUFFER_SPLIT_NB_SEGS);
-
-				/* 
-				 * Do MAC swap onto the CPU to simulate some CPU decisional work.
-				 */
-				if (p_v->workload_type != CPU_WORKLOAD) {
-					struct rte_ether_hdr *eth = (struct rte_ether_hdr *) ((uint8_t *) (rte_pktmbuf_mtod_offset(p_v->comm_list[bindex].mbufs[index], void*, 0)));
-					uint16_t * src_addr = (uint16_t *) (&eth->src_addr);
-					uint16_t * dst_addr = (uint16_t *) (&eth->dst_addr);
-					uint16_t temp = dst_addr[0];
-					dst_addr[0] = src_addr[0];
-					src_addr[0] = temp;
-					temp = dst_addr[1];
-					dst_addr[1] = src_addr[1];
-					src_addr[1] = temp;
-					temp = dst_addr[2];
-					dst_addr[2] = src_addr[2];
-					src_addr[2] = temp;
-#ifdef DEBUG_PRINT
-					uint8_t *src = (uint8_t *) (&eth->src_addr);
-					uint8_t *dst = (uint8_t *) (&eth->dst_addr);
-					fprintf
-						(stderr, "Buffer split #%d, addr=%lx, Source: %02x:%02x:%02x:%02x:%02x:%02x Dest: %02x:%02x:%02x:%02x:%02x:%02x\n",
-							index, ((uint8_t *) (rte_pktmbuf_mtod_offset(p_v->comm_list[bindex].mbufs[index], void*, 0))), 
-							src[0], src[1], src[2], src[3], src[4], src[5],
-							dst[0], dst[1], dst[2], dst[3], dst[4], dst[5]
-						);
-#endif
-				}
-
-				/*
-				 * Buffer provided to the GPU kernel is the second mbuf (segment) which resides in GPU memory
-				 * GPU will still do the MAC swap of some bytes in the payload.
-				 */
-				p_v->comm_list[bindex].pkt_list[index].addr = (uintptr_t) rte_pktmbuf_mtod_offset(p_v->comm_list[bindex].mbufs[index]->next, void*, 0);
-				p_v->comm_list[bindex].pkt_list[index].size = p_v->comm_list[bindex].mbufs[index]->next->data_len;
-			}
-		}
-
 		rte_wmb();
 
 		POP_RANGE;
@@ -556,7 +506,7 @@ static int rx_core(void *arg)
 			workload_launch_gpu_processing(&(p_v->comm_list[bindex]), conf_pktime_ns,
 								MAC_CUDA_BLOCKS, MAC_THREADS_BLOCK, p_v->c_stream);
 			POP_RANGE;
-		} else if (p_v->workload_type == NO_WORKLOAD)
+		} else
 			p_v->comm_list[bindex].status = RTE_GPU_COMM_LIST_DONE;
 
 		if (p_v->start_rx_measure == true && conf_performance_packets > 0 && p_v->rx_pkts >= conf_performance_packets) {
