@@ -16,39 +16,6 @@
 
 #include "headers.h"
 
-/* ======================== BURST QUEUE ========================  */
-
-int create_burst_list(struct burst_item ** _blist) {
-
-	struct burst_item * blist;
-
-	CUDA_CHECK(cudaMallocHost((void**)&blist, MAX_BURSTS_X_QUEUE * sizeof(struct burst_item)));
-	
-	for(int bindex = 0; bindex < MAX_BURSTS_X_QUEUE; bindex++)
-	{
-		blist[bindex].bytes 			= 0;
-		blist[bindex].num_mbufs 		= 0;
-		blist[bindex].status 			= BURST_FREE;
-
-		for(int index = 0; index < MAX_MBUFS_BURST; index++)
-		{
-			blist[bindex].addr[index] 	= 0;
-			blist[bindex].len[index] 	= 0;
-		}
-	}
-
-	(*_blist) = blist;
-
-	return 0;
-}
-
-int destroy_burst_list(struct burst_item ** _blist) {
-
-	cudaFreeHost((*_blist));
-
-	return 0;
-}
-
 uint64_t get_timestamp_ns(void)
 {
     struct timespec t;
