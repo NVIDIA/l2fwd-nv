@@ -595,8 +595,8 @@ static int tx_core(void *arg)
 			break;
 		}
 
-		RTE_GPU_VOLATILE(p_v->comm_list[bindex].num_pkts) = 0;
-		RTE_GPU_VOLATILE(p_v->comm_list[bindex].status) = RTE_GPU_COMM_LIST_FREE;
+		rte_gpu_comm_cleanup_list(&(p_v->comm_list[bindex]));
+
 		if (p_v->workload_type == GPU_PK_WORKLOAD || p_v->workload_type == GPU_GRAPHS_WORKLOAD)
 			RTE_GPU_VOLATILE(((uint32_t*)(p_v->notify_kernel_list.ready_h))[bindex]) = RTE_GPU_COMM_LIST_FREE;
 		rte_mb();
