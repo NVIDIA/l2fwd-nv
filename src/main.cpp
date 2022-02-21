@@ -598,9 +598,6 @@ static int tx_core(void *arg)
 		}
 
 		rte_gpu_comm_cleanup_list(&(p_v->comm_list[bindex]));
-
-		if (p_v->workload_type == GPU_PK_WORKLOAD || p_v->workload_type == GPU_GRAPHS_WORKLOAD)
-			RTE_GPU_VOLATILE(((uint32_t*)(p_v->notify_kernel_list.ready_h))[bindex]) = RTE_GPU_COMM_LIST_FREE;
 		rte_mb();
 
 		bindex = (bindex+1) % MAX_BURSTS_X_QUEUE;

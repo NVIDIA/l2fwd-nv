@@ -67,6 +67,7 @@
 #include <rte_metrics.h>
 #include <rte_bitrate.h>
 #include <rte_latencystats.h>
+#include <rte_eal_paging.h>
 #include <rte_gpudev.h>
 
 ///////////////////////////////////////////////////////////////////////////
@@ -97,24 +98,6 @@ struct port_statistics {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 //// Function declarations
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/////////////////////////////////////////////////////////////////
-// GDRCopy
-/////////////////////////////////////////////////////////////////
-int gdrcopy_alloc_pin(
-                gdr_t*          pgdr,
-                gdr_mh_t*       pgdr_handle,
-                uintptr_t*      pdev_addr,
-                uintptr_t*      phost_ptr,
-                uintptr_t*      free_address,
-                size_t*         palloc_size,
-                size_t          input_size);
-
-void gdrcopy_cleanup(gdr_t      g, 
-                    CUdeviceptr free_dev_addr,
-                    gdr_mh_t    gdr_handle,
-                    void*       host_ptr,
-                    size_t      alloc_size);
 
 /////////////////////////////////////////////////////////////////
 // Workload
