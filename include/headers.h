@@ -67,7 +67,6 @@
 #include <rte_metrics.h>
 #include <rte_bitrate.h>
 #include <rte_latencystats.h>
-#include <rte_eal_paging.h>
 #include <rte_gpudev.h>
 
 ///////////////////////////////////////////////////////////////////////////

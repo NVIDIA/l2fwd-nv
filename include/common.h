@@ -67,6 +67,8 @@ static constexpr uint32_t GPU_PAGE_SIZE = (1UL << GPU_PAGE_SHIFT);
 static constexpr uint32_t GPU_PAGE_OFFSET = (GPU_PAGE_SIZE - 1);
 static constexpr uint32_t GPU_PAGE_MASK = (~GPU_PAGE_OFFSET);
 
+static constexpr uint32_t CPU_PAGE_SIZE = 4096;
+
 static constexpr uint32_t NV_MIN_PIN_SIZE = 4;
 
 enum workload_flags {

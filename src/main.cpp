@@ -728,7 +728,7 @@ int main(int argc, char **argv)
 	} else {
 		ext_mem.buf_iova = RTE_BAD_IOVA;
 
-		ext_mem.buf_ptr = rte_gpu_mem_alloc(conf_gpu_id, ext_mem.buf_len, rte_mem_page_size());
+		ext_mem.buf_ptr = rte_gpu_mem_alloc(conf_gpu_id, ext_mem.buf_len, CPU_PAGE_SIZE);
 		if (ext_mem.buf_ptr == NULL)
 			rte_exit(EXIT_FAILURE, "Could not allocate GPU device memory\n");
 
