@@ -278,13 +278,9 @@ void check_all_ports_link_status(uint32_t port_mask)
 			/* print link status if flag set */
 			if (print_flag == 1) {
 				if (link.link_status)
-					printf
-					    ("Port%d Link Up. Speed %u Mbps - %s\n",
-					     portid, link.link_speed,
-					     (link.link_duplex ==
-					      ETH_LINK_FULL_DUPLEX)
-					     ? ("full-duplex")
-					     : ("half-duplex\n"));
+					printf("Port%d Link Up. Speed %u Mbps - %s\n",
+						portid, link.link_speed,
+						(link.link_duplex == RTE_ETH_LINK_FULL_DUPLEX) ? ("full-duplex") : ("half-duplex\n"));
 				else
 					printf("Port %d Link Down\n", portid);
 				continue;

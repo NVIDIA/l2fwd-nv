@@ -54,18 +54,11 @@ Pipeline::Pipeline(int _index,
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	if (workload_type >= GPU_PK_WORKLOAD)
 	{
-		for (int index_item = 0; index_item < MAX_BURSTS_X_QUEUE; index_item++)
-			RTE_GPU_VOLATILE(((uint32_t*)(notify_kernel_list.ready_h))[index_item]) = BURST_FREE;			
-
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		//// ONE CUDA KERNEL PER PIPELINE
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		if(workload_type == GPU_PK_WORKLOAD)
-		{
-			workload_launch_persistent_gpu_processing(comm_list, (uint32_t*)(notify_kernel_list.ready_d),
-												pkt_time_ns,
-												PK_CUDA_BLOCKS, PK_CUDA_THREADS, c_stream);
-		}
+			workload_launch_persistent_gpu_processing(comm_list, pkt_time_ns, PK_CUDA_BLOCKS, PK_CUDA_THREADS, c_stream);
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		//// CUDA GRAPHS
@@ -76,13 +69,7 @@ Pipeline::Pipeline(int _index,
 			{
 				cudaStreamBeginCapture(c_stream, cudaStreamCaptureModeGlobal);
 				for(int index_b = index_g*GRAPH_BURST; index_b < ((index_g+1)*GRAPH_BURST); index_b++)
-				{
-					workload_launch_gpu_graph_processing(
-								&(comm_list[index_b]), &(((uint32_t*)(notify_kernel_list.ready_d))[index_b]),
-								pkt_time_ns, 
-								MAC_CUDA_BLOCKS, MAC_THREADS_BLOCK, c_stream
-							);
-				}
+					workload_launch_gpu_graph_processing(&(comm_list[index_b]), pkt_time_ns, MAC_CUDA_BLOCKS, MAC_THREADS_BLOCK, c_stream);
 				cudaStreamEndCapture(c_stream, &wgraph[index_g]);
 				cudaGraphInstantiate(&winstance[index_g], wgraph[index_g], NULL, NULL, 0);
 			}
@@ -109,11 +96,11 @@ Pipeline::~Pipeline() {
 }
 
 void Pipeline::terminateWorkload() {
+
 	if(workload_type == GPU_PK_WORKLOAD || workload_type == GPU_GRAPHS_WORKLOAD) {
 		printf("Terminating pending CUDA kernels...\n");
 		for (int index_item = 0; index_item < MAX_BURSTS_X_QUEUE; index_item++) {
-			ret = rte_gpu_comm_set_status(&comm_list[index_item], RTE_GPU_COMM_LIST_ERROR);
-			if(ret) {
+			if(rte_gpu_comm_set_status(&comm_list[index_item], RTE_GPU_COMM_LIST_ERROR)) {
 				fprintf(stderr, "Can't set status RTE_GPU_COMM_LIST_ERROR on item %d\n", index_item);
 			}
 		}

@@ -61,18 +61,18 @@ struct rte_pktmbuf_extmem ext_mem;
 
 static struct rte_eth_conf conf_eth_port = {
 	.rxmode = {
-		.mq_mode = ETH_MQ_RX_RSS,
+		.mq_mode = RTE_ETH_MQ_RX_RSS,
 		.split_hdr_size = 0,
 		.offloads = RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT, // Required by buffer split feature
 	},
 	.txmode = {
-		.mq_mode = ETH_MQ_TX_NONE,
+		.mq_mode = RTE_ETH_MQ_TX_NONE,
 		.offloads = RTE_ETH_TX_OFFLOAD_MULTI_SEGS,
 	},
 	.rx_adv_conf = {
 		.rss_conf = {
 			.rss_key = NULL,
-			.rss_hf = ETH_RSS_IP
+			.rss_hf = RTE_ETH_RSS_IP
 		},
 	},
 };
@@ -759,7 +759,7 @@ int main(int argc, char **argv)
 
 		memcpy(&rxconf_qsplit, &dev_info.default_rxconf, sizeof(rxconf_qsplit));
 
-		rxconf_qsplit.offloads = DEV_RX_OFFLOAD_SCATTER | RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT;
+		rxconf_qsplit.offloads = RTE_RX_OFFLOAD_SCATTER | RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT;
 		rxconf_qsplit.rx_nseg = BUFFER_SPLIT_NB_SEGS;
 		rxconf_qsplit.rx_seg = rx_useg;
 
@@ -773,8 +773,8 @@ int main(int argc, char **argv)
 		rx_seg->length = 0;
 		rx_seg->offset = 0;
 
-		conf_eth_port.rxmode.offloads = DEV_RX_OFFLOAD_SCATTER | RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT;
-		conf_eth_port.txmode.offloads = DEV_TX_OFFLOAD_MULTI_SEGS;
+		conf_eth_port.rxmode.offloads = RTE_RX_OFFLOAD_SCATTER | RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT;
+		conf_eth_port.txmode.offloads = RTE_TX_OFFLOAD_MULTI_SEGS;
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
