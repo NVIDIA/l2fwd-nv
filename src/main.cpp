@@ -759,7 +759,7 @@ int main(int argc, char **argv)
 
 		memcpy(&rxconf_qsplit, &dev_info.default_rxconf, sizeof(rxconf_qsplit));
 
-		rxconf_qsplit.offloads = RTE_RX_OFFLOAD_SCATTER | RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT;
+		rxconf_qsplit.offloads = RTE_ETH_RX_OFFLOAD_SCATTER | RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT;
 		rxconf_qsplit.rx_nseg = BUFFER_SPLIT_NB_SEGS;
 		rxconf_qsplit.rx_seg = rx_useg;
 
@@ -773,8 +773,8 @@ int main(int argc, char **argv)
 		rx_seg->length = 0;
 		rx_seg->offset = 0;
 
-		conf_eth_port.rxmode.offloads = RTE_RX_OFFLOAD_SCATTER | RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT;
-		conf_eth_port.txmode.offloads = RTE_TX_OFFLOAD_MULTI_SEGS;
+		conf_eth_port.rxmode.offloads = RTE_ETH_RX_OFFLOAD_SCATTER | RTE_ETH_RX_OFFLOAD_BUFFER_SPLIT;
+		conf_eth_port.txmode.offloads = RTE_ETH_TX_OFFLOAD_MULTI_SEGS;
 	}
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
