@@ -19,8 +19,6 @@ SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 ENABLE_TESTING()
 
-SET(TARGET l2fwdnv)
-
 # FIXME: enable build for a generic target
 ADD_COMPILE_DEFINITIONS("ALLOW_EXPERIMENTAL_API")
 
@@ -145,11 +143,10 @@ add_custom_target(
 # gdrcopy makefile doesn't support make with multiple jobs
 # dorce cmake to build DPDK first
 ADD_DEPENDENCIES(${GDRC_TARGET} ${DPDK_TARGET})
-# Force cmake to build libgdrapi.so
-ADD_DEPENDENCIES(${TARGET} ${GDRC_TARGET})
-
 
 ######################################### L2FWDNV ################################################
+
+SET(TARGET l2fwdnv)
 
 SET(L2FWDNV_SRCS
         src/kernel.cu
@@ -159,6 +156,8 @@ SET(L2FWDNV_SRCS
 )
 
 ADD_EXECUTABLE(${TARGET} ${L2FWDNV_SRCS})
+# Force cmake to build libgdrapi.so
+ADD_DEPENDENCIES(${TARGET} ${GDRC_TARGET})
 
 # Link with nvToolsExt
 if (ENABLE_NVTX)
