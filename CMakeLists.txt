@@ -35,7 +35,7 @@ option(ENABLE_NVTX  "Enable use of NVTX" OFF)
 
 ############################################ CUDA ###################################################
 
-FIND_PACKAGE(CUDA 10 REQUIRED)
+FIND_PACKAGE(CUDA 11 REQUIRED)
 FIND_LIBRARY(CUDA_DRIVER_LIBRARY
              NAMES cuda_driver cuda
              HINTS ${CUDA_TOOLKIT_ROOT_DIR}
@@ -105,7 +105,7 @@ EXECUTE_PROCESS(WORKING_DIRECTORY ${DPDK_PATH}
                 --prefix=${DPDK_TARGET_INSTALL_PATH}
                 -Dtests=false
                 -Ddisable_drivers=${DPDK_DISABLED_DRIVERS}
-                -Dc_args=-I${CUDA_INCLUDE_DIRS}
+                -Dc_args="-I${CUDA_INCLUDE_DIRS} -I${CMAKE_CURRENT_SOURCE_DIR}/external/gdrcopy/include"
 		# --cross-file config/arm/arm64_armv8_linux_gcc
 		# -Dbuildtype=debug
         )
@@ -145,12 +145,8 @@ SET(L2FWDNV_SRCS
         src/kernel.cu
         src/main.cpp
         src/utils.cpp
-        src/gdrcopy.cpp
         src/pipeline.cpp
-        external/gdrcopy/src/gdrapi.c
-        external/gdrcopy/src/memcpy_avx.c
-        external/gdrcopy/src/memcpy_sse.c
-        external/gdrcopy/src/memcpy_sse41.c)
+)
 
 ADD_EXECUTABLE(${TARGET} ${L2FWDNV_SRCS})
 
@@ -160,16 +156,19 @@ if (ENABLE_NVTX)
     add_definitions(-DUSE_NVTX=1)
 endif (ENABLE_NVTX)
 
-TARGET_INCLUDE_DIRECTORIES(${TARGET} PUBLIC include 
-                                            external/gdrcopy/include
-                                            external/gdrcopy/src
-                                            external/gdrcopy/src/gdrdrv
-                                            PUBLIC ${CUDA_INCLUDE_DIRS})
+add_custom_target(
+   gdrcopy_lib
+   COMMAND make
+   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/external/gdrcopy
+)
+# add_executable(myexecutable myexcutable.c)
+# target_link_libraries(myexecutable full_path_to_generated_library)
+# Force cmake to build libgdrapi.so
+add_dependencies(${TARGET} gdrcopy_lib)
 
 TARGET_LINK_LIBRARIES(${TARGET} ${DPDK_LIBS} ${CUDA_LIBRARIES} ${CUDA_DRIVER_LIBRARY} ${NVTX_LIB})
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -O3 -std=c++11 ${CMAKE_COMMON_FLAGS} -g3 ${DPDK_BUILD_FLAGS}")
-SET(GDRCOPY_FLAGS "-mavx -msse4.1")
-SET(CMAKE_C_FLAGS "${CMAKE_COMMON_FLAGS} ${DPDK_BUILD_FLAGS} ${GDRCOPY_FLAGS}")
+SET(CMAKE_C_FLAGS "${CMAKE_COMMON_FLAGS} ${DPDK_BUILD_FLAGS}")
 
 # Enable to debug CUDA kernels
 string(STRIP ${DPDK_BUILD_FLAGS} DPDK_STRIPPED_FLAGS)

@@ -53,11 +53,6 @@ static const char short_options[] =
 static std::vector<Pipeline *> pipeline_v;
 
 ////////////////////////////////////////////////////////////////////////
-//// GDRCopy
-////////////////////////////////////////////////////////////////////////
-gdr_t gdr_descr;
-
-////////////////////////////////////////////////////////////////////////
 //// DPDK config
 ////////////////////////////////////////////////////////////////////////
 struct rte_ether_addr conf_ports_eth_addr[RTE_MAX_ETHPORTS];
@@ -401,7 +396,8 @@ static int rx_core(void *arg)
 	int nb_rx = 0, bindex = 0, nbytes = 0, nburst = 0, ngraph = 0;
 	Pipeline * p_v = pipeline_v[pipeline_idx];
 	struct rte_mbuf * rx_mbufs[MAX_MBUFS_BURST];
-	uint32_t ret = 0;
+	int ret = 0;
+	enum rte_gpu_comm_list_status status;
 
 	printf("Starting RX Core %u on queue %ld, socket %u\n", rte_lcore_id(), pipeline_idx, rte_socket_id());
 
@@ -414,8 +410,14 @@ static int rx_core(void *arg)
 	}
 
 	while (RTE_GPU_VOLATILE(force_quit) == 0 && RTE_GPU_VOLATILE(p_v->pipeline_force_quit) == 0) {
+		ret = rte_gpu_comm_get_status(&p_v->comm_list[bindex], &status);
+		if(ret) {
+			fprintf(stderr, "rte_gpu_comm_get_status error, killing the app...\n");
+			RTE_GPU_VOLATILE(force_quit) = 1;
+			return -1;
+		}
 
-		if (RTE_GPU_VOLATILE(p_v->comm_list[bindex].status) != RTE_GPU_COMM_LIST_FREE) {
+		if (status != RTE_GPU_COMM_LIST_FREE) {
 			fprintf(stderr, "Burst %d is not free. Pipeline it's too slow, quitting...\n", bindex);
 			RTE_GPU_VOLATILE(force_quit) = 1;
 			return -1;
@@ -463,7 +465,6 @@ static int rx_core(void *arg)
 		 * It will not populate comm item in case of buffer split
 		 * Here you can customize how to pass the info to the CUDA kernel (address of which segment)
 		 */
-
 		if(ret == -ENOTSUP) {
 			for (int index=0; index < nb_rx; index++) {
 				p_v->comm_list[bindex].pkt_list[index].addr = rte_pktmbuf_mtod_offset(rx_mbufs[index], uintptr_t, 0);
@@ -472,7 +473,7 @@ static int rx_core(void *arg)
 			}
 			RTE_GPU_VOLATILE(p_v->comm_list[bindex].num_pkts) = nb_rx;
 			rte_gpu_wmb(p_v->comm_list[bindex].dev_id);
-			RTE_GPU_VOLATILE(p_v->comm_list[bindex].status) = RTE_GPU_COMM_LIST_READY;
+			rte_gpu_comm_set_status(&p_v->comm_list[bindex], RTE_GPU_COMM_LIST_READY);
 		} else if(ret != 0) {
 			fprintf(stderr, "rte_gpu_comm_populate_list_pkts returned error %d\n", ret);
 			RTE_GPU_VOLATILE(p_v->pipeline_force_quit) = 1;
@@ -484,14 +485,6 @@ static int rx_core(void *arg)
 		POP_RANGE;
 
 		if (p_v->workload_type == GPU_PK_WORKLOAD || p_v->workload_type == GPU_GRAPHS_WORKLOAD) {
-			PUSH_RANGE("signal_pk", 4);
-
-			RTE_GPU_VOLATILE(((uint32_t*)(p_v->notify_kernel_list.ready_h))[bindex]) = RTE_GPU_COMM_LIST_READY;
-			rte_mb();
-			rte_gpu_wmb(conf_gpu_id);
-
-			POP_RANGE;
-
 			if (p_v->workload_type == GPU_GRAPHS_WORKLOAD) {
 				if (nburst == (GRAPH_BURST-1)) {
 					CUDA_CHECK(cudaGraphLaunch(p_v->winstance[ngraph], p_v->c_stream));
@@ -507,7 +500,7 @@ static int rx_core(void *arg)
 								MAC_CUDA_BLOCKS, MAC_THREADS_BLOCK, p_v->c_stream);
 			POP_RANGE;
 		} else
-			p_v->comm_list[bindex].status = RTE_GPU_COMM_LIST_DONE;
+			rte_gpu_comm_set_status(&p_v->comm_list[bindex], RTE_GPU_COMM_LIST_DONE);
 
 		if (p_v->start_rx_measure == true && conf_performance_packets > 0 && p_v->rx_pkts >= conf_performance_packets) {
 			printf("Closing RX core (%ld), received packets = %ld\n", pipeline_idx, p_v->rx_pkts);
@@ -530,7 +523,8 @@ static int rx_core(void *arg)
 static int tx_core(void *arg)
 {
 	long pipeline_idx = (long)arg;
-	int nb_tx = 0, bindex = 0, nbytes = 0;
+	int nb_tx = 0, bindex = 0, nbytes = 0, ret = 0;
+	enum rte_gpu_comm_list_status status;
 	Pipeline * p_v;
 	p_v = pipeline_v[pipeline_idx];
 
@@ -541,11 +535,19 @@ static int tx_core(void *arg)
 
 	while (RTE_GPU_VOLATILE(force_quit) == 0 && RTE_GPU_VOLATILE(p_v->pipeline_force_quit) == 0) {
 		PUSH_RANGE("wait_burst", 7);
-		while(
+		do {
+			ret = rte_gpu_comm_get_status(&p_v->comm_list[bindex], &status);
+			if(ret) {
+				fprintf(stderr, "rte_gpu_comm_get_status error, killing the app...\n");
+				RTE_GPU_VOLATILE(force_quit) = 1;
+				return -1;
+			}
+		} while(
 				RTE_GPU_VOLATILE(force_quit) == 0				&& 
 				RTE_GPU_VOLATILE(p_v->pipeline_force_quit) == 0 &&
-				RTE_GPU_VOLATILE(p_v->comm_list[bindex].status) != RTE_GPU_COMM_LIST_DONE
+				status != RTE_GPU_COMM_LIST_DONE
 			);
+
 		rte_rmb(); //Avoid prediction
 		POP_RANGE;
 
@@ -729,7 +731,7 @@ int main(int argc, char **argv)
 	} else {
 		ext_mem.buf_iova = RTE_BAD_IOVA;
 
-		ext_mem.buf_ptr = rte_gpu_mem_alloc(conf_gpu_id, ext_mem.buf_len);
+		ext_mem.buf_ptr = rte_gpu_mem_alloc(conf_gpu_id, ext_mem.buf_len, rte_mem_page_size());
 		if (ext_mem.buf_ptr == NULL)
 			rte_exit(EXIT_FAILURE, "Could not allocate GPU device memory\n");
 
@@ -848,20 +850,11 @@ int main(int argc, char **argv)
 	print_opts();
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	//// GDRCOPY FLUSH
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	gdr_descr = gdr_open();
-	if (gdr_descr == NULL) {
-		fprintf(stderr, "nv_init_gdrcopy failed\n");
-		exit(EXIT_FAILURE);
-	}
-
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	//// BURST QUEUE PER PIPELINE
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	pipeline_v.reserve(conf_num_pipelines);
 	for(int index_p = 0; index_p < conf_num_pipelines; index_p++)
-		pipeline_v.push_back(new Pipeline(index_p, conf_workload, conf_pktime_ns, &gdr_descr, index_p, index_p, conf_gpu_id));
+		pipeline_v.push_back(new Pipeline(index_p, conf_workload, conf_pktime_ns, index_p, index_p, conf_gpu_id));
 
 	if (conf_nvprofiler)
 		cudaProfilerStart();
@@ -920,7 +913,6 @@ int main(int argc, char **argv)
 	//// Final cleanup
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	pipeline_v.clear();
-	gdr_close(gdr_descr);
 
 	ret = rte_dev_dma_unmap(dev_info.device, ext_mem.buf_ptr, ext_mem.buf_iova, ext_mem.buf_len);
 	if (ret)

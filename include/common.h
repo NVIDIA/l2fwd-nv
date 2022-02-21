@@ -62,10 +62,10 @@ static constexpr uint32_t MEM_HOST_PINNED = 0;
 static constexpr uint32_t GAP_PKTS = 4;
 static constexpr uint32_t MAX_WTIME_NS = 20000000; // 20ms
 
-// static constexpr uint32_t GPU_PAGE_SHIFT = 16;
-// static constexpr uint32_t GPU_PAGE_SIZE = (1UL << GPU_PAGE_SHIFT);
-// static constexpr uint32_t GPU_PAGE_OFFSET = (GPU_PAGE_SIZE - 1);
-// static constexpr uint32_t GPU_PAGE_MASK = (~GPU_PAGE_OFFSET);
+static constexpr uint32_t GPU_PAGE_SHIFT = 16;
+static constexpr uint32_t GPU_PAGE_SIZE = (1UL << GPU_PAGE_SHIFT);
+static constexpr uint32_t GPU_PAGE_OFFSET = (GPU_PAGE_SIZE - 1);
+static constexpr uint32_t GPU_PAGE_MASK = (~GPU_PAGE_OFFSET);
 
 static constexpr uint32_t NV_MIN_PIN_SIZE = 4;
 

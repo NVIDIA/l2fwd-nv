@@ -21,14 +21,6 @@
 #include <chrono>
 #include <time.h>
 
-struct notify_kernel_item {
-	gdr_mh_t ready_mh;
-	uintptr_t ready_d;
-	uintptr_t ready_h;
-	uintptr_t ready_free;
-	size_t ready_size;
-};
-
 using t_ns = std::chrono::nanoseconds;
 using t_us = std::chrono::microseconds;
 using t_ms = std::chrono::milliseconds;
@@ -70,7 +62,7 @@ class Time {
 class Pipeline {
 
 	public:
-		Pipeline(int _index, int _workload_type, int _pkt_time_ns, gdr_t * _gdr_descr, int _rx_queue, int _tx_queue, int _gpu_id);
+		Pipeline(int _index, int _workload_type, int _pkt_time_ns, int _rx_queue, int _tx_queue, int _gpu_id);
 		~Pipeline();
 		void terminateWorkload();
 
@@ -80,9 +72,7 @@ class Pipeline {
 		int pkt_time_ns;
 		int rx_queue;
 		int tx_queue;
-		gdr_t * gdr_descr;
 		struct rte_gpu_comm_list *comm_list;
-		struct notify_kernel_item notify_kernel_list;
 		cudaStream_t c_stream;
 		// struct burst_item_sync * burst_sync_list;
 		cudaGraph_t wgraph[N_GRAPHS];

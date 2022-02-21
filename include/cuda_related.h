@@ -21,7 +21,6 @@
 #include <cuda_runtime.h>
 #include <cuda_runtime_api.h>
 #include <cuda_profiler_api.h>
-#include "gdrapi.h"
 
 #ifdef USE_NVTX
   #include <nvToolsExt.h>
