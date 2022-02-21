@@ -19,6 +19,8 @@ SET(CMAKE_CXX_STANDARD_REQUIRED ON)
 SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 ENABLE_TESTING()
 
+SET(TARGET l2fwdnv)
+
 # FIXME: enable build for a generic target
 ADD_COMPILE_DEFINITIONS("ALLOW_EXPERIMENTAL_API")
 
@@ -148,8 +150,6 @@ ADD_DEPENDENCIES(${TARGET} ${GDRC_TARGET})
 
 
 ######################################### L2FWDNV ################################################
-
-SET(TARGET l2fwdnv)
 
 SET(L2FWDNV_SRCS
         src/kernel.cu
