@@ -288,7 +288,7 @@ __global__ void kernel_graphs_mac_update(struct rte_gpu_comm_list * comm_item_li
 	__syncthreads();
 
 	if (idx == 0) {
-		RTE_GPU_VOLATILE(*(comm_list->status_d)) = RTE_GPU_COMM_LIST_DONE;
+		RTE_GPU_VOLATILE(*(comm_item_list->status_d)) = RTE_GPU_COMM_LIST_DONE;
 		__threadfence_system();
 	}
 	__syncthreads();
