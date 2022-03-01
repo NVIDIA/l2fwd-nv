@@ -184,7 +184,7 @@ __global__ void kernel_persistent_mac_update(struct rte_gpu_comm_list * comm_lis
 		__syncthreads();
 		
 		if (idx == 0) {
-			RTE_GPU_VOLATILE(comm_list[item_index].status) = RTE_GPU_COMM_LIST_DONE;
+			RTE_GPU_VOLATILE(comm_list[item_index].status_d[0]) = RTE_GPU_COMM_LIST_DONE;
 			__threadfence_system();
 		}
 
