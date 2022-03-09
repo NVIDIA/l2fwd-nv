@@ -85,7 +85,7 @@ __global__ void kernel_mac_update(struct rte_gpu_comm_list *comm_list, uint64_t 
 	__syncthreads();
 
 	if (idx == 0) {
-		comm_list->status = RTE_GPU_COMM_LIST_DONE;
+		RTE_GPU_VOLATILE(*(comm_list->status_d)) = RTE_GPU_COMM_LIST_DONE;
 		__threadfence_system();
 	}
 	__syncthreads();
@@ -108,8 +108,7 @@ void workload_launch_gpu_processing(struct rte_gpu_comm_list * comm_list, uint64
 /////////////////////////////////////////////////////////////////////////////////////////
 //// Persistent CUDA kernel -w 3
 /////////////////////////////////////////////////////////////////////////////////////////
-__global__ void kernel_persistent_mac_update(struct rte_gpu_comm_list * comm_list,
-											uint32_t * wait_list_d, uint64_t wtime_n)
+__global__ void kernel_persistent_mac_update(struct rte_gpu_comm_list * comm_list, uint64_t wtime_n)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	int item_index = 0;
@@ -126,8 +125,7 @@ __global__ void kernel_persistent_mac_update(struct rte_gpu_comm_list * comm_lis
 		{
 			while (1)
 			{
-				wait_status = RTE_GPU_VOLATILE(wait_list_d[item_index]);
-				// wait_status = RTE_GPU_VOLATILE(comm_list[item_index].status);
+				wait_status = RTE_GPU_VOLATILE(comm_list[item_index].status_d[0]);
 				if(wait_status != RTE_GPU_COMM_LIST_FREE)
 				{
 					wait_status_shared[0] = wait_status;
@@ -186,7 +184,7 @@ __global__ void kernel_persistent_mac_update(struct rte_gpu_comm_list * comm_lis
 		__syncthreads();
 		
 		if (idx == 0) {
-			RTE_GPU_VOLATILE(comm_list[item_index].status) = RTE_GPU_COMM_LIST_DONE;
+			RTE_GPU_VOLATILE(comm_list[item_index].status_d[0]) = RTE_GPU_COMM_LIST_DONE;
 			__threadfence_system();
 		}
 
@@ -195,7 +193,6 @@ __global__ void kernel_persistent_mac_update(struct rte_gpu_comm_list * comm_lis
 }
 
 void workload_launch_persistent_gpu_processing(struct rte_gpu_comm_list * comm_list,
-						uint32_t * wait_list_d,
 						uint64_t wtime_n,
 						int cuda_blocks, int cuda_threads,
 						cudaStream_t stream)
@@ -206,15 +203,14 @@ void workload_launch_persistent_gpu_processing(struct rte_gpu_comm_list * comm_l
 		return;
 
 	CUDA_CHECK(cudaGetLastError());
-	kernel_persistent_mac_update <<< cuda_blocks, cuda_threads, 0, stream >>> (comm_list, wait_list_d, wtime_n);
+	kernel_persistent_mac_update <<< cuda_blocks, cuda_threads, 0, stream >>> (comm_list, wtime_n);
 	CUDA_CHECK(cudaGetLastError());
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
 //// CUDA GRAPHS kernel -w 4
 /////////////////////////////////////////////////////////////////////////////////////////
-__global__ void kernel_graphs_mac_update(struct rte_gpu_comm_list * comm_item_list,
-										uint32_t * wait_list_d, uint64_t wtime_n)
+__global__ void kernel_graphs_mac_update(struct rte_gpu_comm_list * comm_item_list, uint64_t wtime_n)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
 	uint16_t temp;
@@ -226,7 +222,7 @@ __global__ void kernel_graphs_mac_update(struct rte_gpu_comm_list * comm_item_li
 	{
 		while (1)
 		{
-			wait_status = RTE_GPU_VOLATILE(wait_list_d[0]);
+			wait_status = RTE_GPU_VOLATILE(comm_item_list->status_d[0]);
 			if(wait_status != RTE_GPU_COMM_LIST_FREE)
 			{
 				wait_status_shared[0] = wait_status;
@@ -288,19 +284,19 @@ __global__ void kernel_graphs_mac_update(struct rte_gpu_comm_list * comm_item_li
 	__syncthreads();
 
 	if (idx == 0) {
-		RTE_GPU_VOLATILE(comm_item_list->status) = RTE_GPU_COMM_LIST_DONE;
+		RTE_GPU_VOLATILE(*(comm_item_list->status_d)) = RTE_GPU_COMM_LIST_DONE;
 		__threadfence_system();
 	}
 	__syncthreads();
 }
 
-void workload_launch_gpu_graph_processing(struct rte_gpu_comm_list * bitem,  uint32_t * wait_list_d, uint64_t wtime_n,
+void workload_launch_gpu_graph_processing(struct rte_gpu_comm_list * bitem, uint64_t wtime_n,
 										int cuda_blocks, int cuda_threads, cudaStream_t stream)
 {
 	assert(cuda_blocks == 1);
 	assert(cuda_threads > 0);
 
 	CUDA_CHECK(cudaGetLastError());
-	kernel_graphs_mac_update <<< cuda_blocks, cuda_threads, 0, stream >>> (bitem, wait_list_d, wtime_n);
+	kernel_graphs_mac_update <<< cuda_blocks, cuda_threads, 0, stream >>> (bitem, wtime_n);
 	CUDA_CHECK(cudaGetLastError());
 }

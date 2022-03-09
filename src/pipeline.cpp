@@ -19,7 +19,6 @@
 Pipeline::Pipeline(int _index,
 					int _workload_type,
 					int _pkt_time_ns,
-					gdr_t * _gdr_descr,
 					int _rx_queue,
 					int _tx_queue,
 					int _gpu_id)
@@ -27,7 +26,6 @@ Pipeline::Pipeline(int _index,
 					index(_index),
 					workload_type(_workload_type),
 					pkt_time_ns(_pkt_time_ns),
-					gdr_descr(_gdr_descr),
 					rx_queue(_rx_queue),
 					tx_queue(_tx_queue),
 					gpu_id(_gpu_id)
@@ -56,31 +54,11 @@ Pipeline::Pipeline(int _index,
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 	if (workload_type >= GPU_PK_WORKLOAD)
 	{
-		if (0 != gdrcopy_alloc_pin(
-							gdr_descr,
-							&(notify_kernel_list.ready_mh), 
-							&(notify_kernel_list.ready_d), 
-							&(notify_kernel_list.ready_h),
-							&(notify_kernel_list.ready_free),
-							&(notify_kernel_list.ready_size),
-							MAX_BURSTS_X_QUEUE * sizeof(uint32_t))
-		) {
-			fprintf(stderr, "gdrcopy_alloc_pin flush failed\n");
-			exit(EXIT_FAILURE);
-		}
-
-		for (int index_item = 0; index_item < MAX_BURSTS_X_QUEUE; index_item++)
-			RTE_GPU_VOLATILE(((uint32_t*)(notify_kernel_list.ready_h))[index_item]) = BURST_FREE;			
-
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		//// ONE CUDA KERNEL PER PIPELINE
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		if(workload_type == GPU_PK_WORKLOAD)
-		{
-			workload_launch_persistent_gpu_processing(comm_list, (uint32_t*)(notify_kernel_list.ready_d),
-												pkt_time_ns,
-												PK_CUDA_BLOCKS, PK_CUDA_THREADS, c_stream);
-		}
+			workload_launch_persistent_gpu_processing(comm_list, pkt_time_ns, PK_CUDA_BLOCKS, PK_CUDA_THREADS, c_stream);
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		//// CUDA GRAPHS
@@ -91,13 +69,7 @@ Pipeline::Pipeline(int _index,
 			{
 				cudaStreamBeginCapture(c_stream, cudaStreamCaptureModeGlobal);
 				for(int index_b = index_g*GRAPH_BURST; index_b < ((index_g+1)*GRAPH_BURST); index_b++)
-				{
-					workload_launch_gpu_graph_processing(
-								&(comm_list[index_b]), &(((uint32_t*)(notify_kernel_list.ready_d))[index_b]),
-								pkt_time_ns, 
-								MAC_CUDA_BLOCKS, MAC_THREADS_BLOCK, c_stream
-							);
-				}
+					workload_launch_gpu_graph_processing(&(comm_list[index_b]), pkt_time_ns, MAC_CUDA_BLOCKS, MAC_THREADS_BLOCK, c_stream);
 				cudaStreamEndCapture(c_stream, &wgraph[index_g]);
 				cudaGraphInstantiate(&winstance[index_g], wgraph[index_g], NULL, NULL, 0);
 			}
@@ -112,15 +84,6 @@ Pipeline::~Pipeline() {
 	
 	rte_gpu_comm_destroy_list(comm_list, MAX_BURSTS_X_QUEUE);
 
-	if (workload_type >= GPU_PK_WORKLOAD)
-		gdrcopy_cleanup(
-							*gdr_descr,
-							(CUdeviceptr) notify_kernel_list.ready_free,
-							notify_kernel_list.ready_mh,
-							(void*)notify_kernel_list.ready_h,
-							notify_kernel_list.ready_size
-						);
-
 	if(workload_type == GPU_GRAPHS_WORKLOAD)
 	{
 		for(int index_g = 0; index_g < N_GRAPHS; index_g++)
@@ -133,11 +96,13 @@ Pipeline::~Pipeline() {
 }
 
 void Pipeline::terminateWorkload() {
+
 	if(workload_type == GPU_PK_WORKLOAD || workload_type == GPU_GRAPHS_WORKLOAD) {
 		printf("Terminating pending CUDA kernels...\n");
 		for (int index_item = 0; index_item < MAX_BURSTS_X_QUEUE; index_item++) {
-			RTE_GPU_VOLATILE(comm_list[index_item].status) = RTE_GPU_COMM_LIST_ERROR;
-			RTE_GPU_VOLATILE(((uint32_t*)(notify_kernel_list.ready_h))[index_item]) = RTE_GPU_COMM_LIST_ERROR;
+			if(rte_gpu_comm_set_status(&comm_list[index_item], RTE_GPU_COMM_LIST_ERROR)) {
+				fprintf(stderr, "Can't set status RTE_GPU_COMM_LIST_ERROR on item %d\n", index_item);
+			}
 		}
 
 		CUDA_CHECK(cudaStreamSynchronize(c_stream));

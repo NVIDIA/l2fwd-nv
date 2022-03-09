@@ -31,11 +31,9 @@ OPTION(IPV4_UDP_MODE "Encapsulate eCPRI packets in IPv4/UDP" OFF)
 OPTION(PROFILE_LOGS "Periodically dump profiling and monitoring statistics" OFF)
 option(ENABLE_NVTX  "Enable use of NVTX" OFF)
 
-#####################################################################################################
-
 ############################################ CUDA ###################################################
 
-FIND_PACKAGE(CUDA 10 REQUIRED)
+FIND_PACKAGE(CUDA 11 REQUIRED)
 FIND_LIBRARY(CUDA_DRIVER_LIBRARY
              NAMES cuda_driver cuda
              HINTS ${CUDA_TOOLKIT_ROOT_DIR}
@@ -49,8 +47,6 @@ IF (NOT CUDA_DRIVER_LIBRARY)
                  PATH_SUFFIXES lib64/stubs lib/x64/stubs lib/stubs stubs compat)
 ENDIF ()
 MARK_AS_ADVANCED(CUDA_DRIVER_LIBRARY)
-
-##################################################################################################
 
 ############################################ DPDK ###################################################
 
@@ -97,17 +93,18 @@ STRING(CONCAT DPDK_DISABLED_DRIVERS
         "net/thunderx,"
         "net/vdev_netvsc,"
         "net/vmxnet3,"
-	"regex/octeontx2,"
+        "regex/octeontx2,"
 )
 
+SET(ENV{CFLAGS} "${CFLAGS} -I${CUDA_INCLUDE_DIRS} -I${CMAKE_CURRENT_SOURCE_DIR}/external/gdrcopy/include")
 EXECUTE_PROCESS(WORKING_DIRECTORY ${DPDK_PATH}
         COMMAND meson ${DPDK_TARGET_ARCH}
                 --prefix=${DPDK_TARGET_INSTALL_PATH}
                 -Dtests=false
                 -Ddisable_drivers=${DPDK_DISABLED_DRIVERS}
-                -Dc_args=-I${CUDA_INCLUDE_DIRS}
-		# --cross-file config/arm/arm64_armv8_linux_gcc
-		# -Dbuildtype=debug
+                # -Dc_args="-I${CUDA_INCLUDE_DIRS} -I${CMAKE_CURRENT_SOURCE_DIR}/external/gdrcopy/include"
+                # --cross-file config/arm/arm64_armv8_linux_gcc
+                # -Dbuildtype=debug
         )
 
 # Set RTE_PKTMBUF_HEADROOM to 0 for GPU memory best performance
@@ -121,7 +118,7 @@ ADD_CUSTOM_TARGET(${DPDK_TARGET} ALL
         COMMAND ninja install
         VERBATIM)
 
-set(ENV{PKG_CONFIG_PATH} "${DPDK_TARGET_PATH}/meson-private")
+SET(ENV{PKG_CONFIG_PATH} "${DPDK_TARGET_PATH}/meson-private")
 
 EXECUTE_PROCESS(OUTPUT_VARIABLE DPDK_BUILD_FLAGS
         OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -135,7 +132,17 @@ EXECUTE_PROCESS(OUTPUT_VARIABLE DPDK_LINK_FLAGS
 
 SET(DPDK_LIBS "-Wl,--no-whole-archive -lmlx5 -libverbs -pthread -lnuma -ldl ${DPDK_LINK_FLAGS}")
 
-#####################################################################################################
+############################################ GDRCopy ###################################################
+
+SET(GDRC_TARGET gdrcopy_lib)
+add_custom_target(
+   ${GDRC_TARGET}
+   COMMAND make
+   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/external/gdrcopy
+)
+# gdrcopy makefile doesn't support make with multiple jobs
+# dorce cmake to build DPDK first
+ADD_DEPENDENCIES(${GDRC_TARGET} ${DPDK_TARGET})
 
 ######################################### L2FWDNV ################################################
 
@@ -145,14 +152,12 @@ SET(L2FWDNV_SRCS
         src/kernel.cu
         src/main.cpp
         src/utils.cpp
-        src/gdrcopy.cpp
         src/pipeline.cpp
-        external/gdrcopy/src/gdrapi.c
-        external/gdrcopy/src/memcpy_avx.c
-        external/gdrcopy/src/memcpy_sse.c
-        external/gdrcopy/src/memcpy_sse41.c)
+)
 
 ADD_EXECUTABLE(${TARGET} ${L2FWDNV_SRCS})
+# Force cmake to build libgdrapi.so
+ADD_DEPENDENCIES(${TARGET} ${GDRC_TARGET})
 
 # Link with nvToolsExt
 if (ENABLE_NVTX)
@@ -160,16 +165,11 @@ if (ENABLE_NVTX)
     add_definitions(-DUSE_NVTX=1)
 endif (ENABLE_NVTX)
 
-TARGET_INCLUDE_DIRECTORIES(${TARGET} PUBLIC include 
-                                            external/gdrcopy/include
-                                            external/gdrcopy/src
-                                            external/gdrcopy/src/gdrdrv
-                                            PUBLIC ${CUDA_INCLUDE_DIRS})
+TARGET_INCLUDE_DIRECTORIES(${TARGET} PUBLIC include ${CUDA_INCLUDE_DIRS})
 
 TARGET_LINK_LIBRARIES(${TARGET} ${DPDK_LIBS} ${CUDA_LIBRARIES} ${CUDA_DRIVER_LIBRARY} ${NVTX_LIB})
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_GNU_SOURCE -O3 -std=c++11 ${CMAKE_COMMON_FLAGS} -g3 ${DPDK_BUILD_FLAGS}")
-SET(GDRCOPY_FLAGS "-mavx -msse4.1")
-SET(CMAKE_C_FLAGS "${CMAKE_COMMON_FLAGS} ${DPDK_BUILD_FLAGS} ${GDRCOPY_FLAGS}")
+SET(CMAKE_C_FLAGS "${CMAKE_COMMON_FLAGS} ${DPDK_BUILD_FLAGS}")
 
 # Enable to debug CUDA kernels
 string(STRIP ${DPDK_BUILD_FLAGS} DPDK_STRIPPED_FLAGS)

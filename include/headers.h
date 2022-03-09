@@ -99,24 +99,6 @@ struct port_statistics {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /////////////////////////////////////////////////////////////////
-// GDRCopy
-/////////////////////////////////////////////////////////////////
-int gdrcopy_alloc_pin(
-                gdr_t*          pgdr,
-                gdr_mh_t*       pgdr_handle,
-                uintptr_t*      pdev_addr,
-                uintptr_t*      phost_ptr,
-                uintptr_t*      free_address,
-                size_t*         palloc_size,
-                size_t          input_size);
-
-void gdrcopy_cleanup(gdr_t      g, 
-                    CUdeviceptr free_dev_addr,
-                    gdr_mh_t    gdr_handle,
-                    void*       host_ptr,
-                    size_t      alloc_size);
-
-/////////////////////////////////////////////////////////////////
 // Workload
 /////////////////////////////////////////////////////////////////
 void workload_macswap_cpu(struct rte_gpu_comm_pkt * pkt_list, int nmbuf, uint64_t wtime_ns);
@@ -124,10 +106,10 @@ void workload_macswap_cpu(struct rte_gpu_comm_pkt * pkt_list, int nmbuf, uint64_
 void workload_launch_gpu_processing(struct rte_gpu_comm_list * comm_list, uint64_t wtime_n,
 		int cuda_blocks, int cuda_threads, cudaStream_t stream);
 
-void workload_launch_persistent_gpu_processing(struct rte_gpu_comm_list * comm_item_list, uint32_t * wait_list_d, uint64_t wtime_n,
+void workload_launch_persistent_gpu_processing(struct rte_gpu_comm_list * comm_item_list, uint64_t wtime_n,
 		int cuda_blocks, int cuda_threads, cudaStream_t stream);
 
-void workload_launch_gpu_graph_processing(struct rte_gpu_comm_list * comm_item,  uint32_t * wait_list_d, uint64_t wtime_n,
+void workload_launch_gpu_graph_processing(struct rte_gpu_comm_list * comm_item, uint64_t wtime_n,
 		int cuda_blocks, int cuda_threads, cudaStream_t stream);
 
 /////////////////////////////////////////////////////////////////

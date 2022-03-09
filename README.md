@@ -33,6 +33,14 @@ l2fwd-nv has a trivial workload that doesn't really require the use of CUDA kern
 
 ## Changelog
 
+03/11/2022
+
+* Updated to DPDK 22.03
+* GDRCopy direct calls removed in favour of new `gpudev` cpu_map functions
+* Code cleanup
+
+11/26/2021
+
 * Updated to the latest DPDK 21.11 release
 * Introduced the new [gpudev library](https://github.com/DPDK/dpdk/blob/main/lib/gpudev/rte_gpudev.h)
 * Benchmarks updated to latest MOFED 5.4, DPDK 21.11 and CUDA 11.4 with V100 and A100
@@ -40,7 +48,7 @@ l2fwd-nv has a trivial workload that doesn't really require the use of CUDA kern
 
 ## System configuration
 
-Please note that DPDK 21.11 is included as submodule of this project and it's built locally with l2fwd-nv.
+Please note that DPDK 22.03 is included as submodule of this project and it's built locally with l2fwd-nv.
 
 ### Kernel configuration
 
@@ -93,7 +101,7 @@ Download and install the latest CUDA toolkit from [here](https://developer.nvidi
 
 ### Install meson
 
-DPDK 21.11 requires Meson > 0.49.2.
+DPDK 22.03 requires Meson > 0.49.2.
 
 ```
 sudo apt-get install python3-setuptools ninja-build
@@ -138,13 +146,20 @@ cmake ..
 make -j$(nproc --all)
 ```
 
-#### GDRdrv
+#### GDRCopy & gdrdrv
+
+Starting from DPDK 22.03, GDRCopy has been embedded in DPDK and exposed through `rte_gpu_mem_cpu_map` function.
+The CMakeLists.txt file automatically builds GDRCopy `libgdrapi.so` library.
+After the build stage, you still need to launch `gdrdrv` kernel module on the system.
 
 ```
-cd l2fwd-nv/external/gdrcopy
-make
+cd external/gdrcopy
 sudo ./insmod.sh
 ```
+
+Please note that, to enable GDRCopy in l2fwd-nv at runtime, you need to set the env var
+`GDRCOPY_PATH_L` with the path to `libgdrapi.so` library which resides in
+`/path/to/l2fwd-nv/external/gdrcopy/src`.
 
 ## Benchmarks
 
@@ -176,6 +191,8 @@ In the following benchmarks we report the forwarding throughput: assuming packet
 In this section we report some performance analysis to highlight different l2fwd-nv configurations.
 Benchmarks executed with between two different machines connected back-to-back,
 one with l2fwd-nv and the other with testpmd.
+
+We didn't observe any performance regression upgrading from DPDK 21.11 to DPDK 22.03.
 
 #### l2fwd-nv machine
 
@@ -267,8 +284,11 @@ is fixed to 64 packets.
 Assuming a system with Mellanox network card bus id `b5:00.0` and an NVIDIA GPU with bus id `b6:00.0`, the command line used is:
 
 ```
-sudo ./build/l2fwdnv -l 0-9 -n 8 -a b5:00.1,txq_inline_max=0 -a b6:00.0 -- -m 1 -w 0 -b 64 -p 4 -v 0 -z 0
+sudo GDRCOPY_PATH_L=./external/gdrcopy/src ./build/l2fwdnv -l 0-9 -n 8 -a b5:00.1,txq_inline_max=0 -a b6:00.0 -- -m 1 -w 0 -b 64 -p 4 -v 0 -z 0
 ```
+
+Please note that, if `libcuda.so` is not installed in the default system location, you need to specify
+the path through the `CUDA_PATH_L=/path/to/libcuda.so` env var.
 
 Network throughput measured with mlnx_perf:
 
