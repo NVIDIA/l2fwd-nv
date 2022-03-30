@@ -58,7 +58,7 @@ void workload_macswap_cpu(struct rte_gpu_comm_pkt * pkt_list, int nmbuf, uint64_
 	struct rte_ether_hdr *eth;
 	uint8_t *data_ptr;
 	uint16_t temp;
-	uint16_t *src_addr, *dst_addr;
+	uint16_t *s_addr, *d_addr;
 	int i = 0;
 	uint64_t start;
 
@@ -71,12 +71,12 @@ void workload_macswap_cpu(struct rte_gpu_comm_pkt * pkt_list, int nmbuf, uint64_
 			start = get_timestamp_ns();
 
 		eth = (struct rte_ether_hdr *) (uint8_t *) pkt_list[i].addr;
-		src_addr = (uint16_t *) (&eth->src_addr);
-		dst_addr = (uint16_t *) (&eth->dst_addr);
+		s_addr = (uint16_t *) (&eth->s_addr);
+		d_addr = (uint16_t *) (&eth->d_addr);
 
 #ifdef DEBUG_PRINT
-		uint8_t *src = (uint8_t *) (&eth->src_addr);
-		uint8_t *dst = (uint8_t *) (&eth->dst_addr);
+		uint8_t *src = (uint8_t *) (&eth->s_addr);
+		uint8_t *dst = (uint8_t *) (&eth->d_addr);
 		printf
 		    ("#%d, mbuf_addr=%lx, Source: %02x:%02x:%02x:%02x:%02x:%02x Dest: %02x:%02x:%02x:%02x:%02x:%02x\n",
 		     i, addr[i], src[0], src[1], src[2], src[3], src[4], src[5],
@@ -84,15 +84,15 @@ void workload_macswap_cpu(struct rte_gpu_comm_pkt * pkt_list, int nmbuf, uint64_
 		    );
 #endif
 
-		temp = dst_addr[0];
-		dst_addr[0] = src_addr[0];
-		src_addr[0] = temp;
-		temp = dst_addr[1];
-		dst_addr[1] = src_addr[1];
-		src_addr[1] = temp;
-		temp = dst_addr[2];
-		dst_addr[2] = src_addr[2];
-		src_addr[2] = temp;
+		temp = d_addr[0];
+		d_addr[0] = s_addr[0];
+		s_addr[0] = temp;
+		temp = d_addr[1];
+		d_addr[1] = s_addr[1];
+		s_addr[1] = temp;
+		temp = d_addr[2];
+		d_addr[2] = s_addr[2];
+		s_addr[2] = temp;
 
 		if(wtime_ns)
 			wait_until_ns(start+wtime_ns);
@@ -280,13 +280,13 @@ void check_all_ports_link_status(uint32_t port_mask)
 				if (link.link_status)
 					printf("Port%d Link Up. Speed %u Mbps - %s\n",
 						portid, link.link_speed,
-						(link.link_duplex == RTE_ETH_LINK_FULL_DUPLEX) ? ("full-duplex") : ("half-duplex\n"));
+						(link.link_duplex == ETH_LINK_FULL_DUPLEX) ? ("full-duplex") : ("half-duplex\n"));
 				else
 					printf("Port %d Link Down\n", portid);
 				continue;
 			}
 			/* clear all_ports_up flag if any link down */
-			if (link.link_status == RTE_ETH_LINK_DOWN) {
+			if (link.link_status == ETH_LINK_DOWN) {
 				all_ports_up = 0;
 				break;
 			}

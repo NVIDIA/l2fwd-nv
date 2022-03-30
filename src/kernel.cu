@@ -43,13 +43,13 @@ __global__ void kernel_mac_update(struct rte_gpu_comm_list *comm_list, uint64_t 
 			pkt_start = __globaltimer();
 
 		struct rte_ether_hdr *eth = (struct rte_ether_hdr *)(((uint8_t *) (comm_list->pkt_list[idx].addr)));
-		uint16_t *src_addr = (uint16_t *) (&eth->src_addr);
-		uint16_t *dst_addr = (uint16_t *) (&eth->dst_addr);
+		uint16_t *s_addr = (uint16_t *) (&eth->s_addr);
+		uint16_t *d_addr = (uint16_t *) (&eth->d_addr);
 
 #ifdef DEBUG_PRINT
 		/* Code to verify source and dest of ethernet addresses */
-		uint8_t *src = (uint8_t *) (&eth->src_addr);
-		uint8_t *dst = (uint8_t *) (&eth->dst_addr);
+		uint8_t *src = (uint8_t *) (&eth->s_addr);
+		uint8_t *dst = (uint8_t *) (&eth->d_addr);
 		printf
 		    ("Before Swap, Source: %02x:%02x:%02x:%02x:%02x:%02x Dest: %02x:%02x:%02x:%02x:%02x:%02x\n",
 		     src[0], src[1], src[2], src[3], src[4], src[5], dst[0],
@@ -57,27 +57,27 @@ __global__ void kernel_mac_update(struct rte_gpu_comm_list *comm_list, uint64_t 
 #endif
 
 		/* MAC update */
-		temp = dst_addr[0];
-		dst_addr[0] = src_addr[0];
-		src_addr[0] = temp;
-		temp = dst_addr[1];
-		dst_addr[1] = src_addr[1];
-		src_addr[1] = temp;
-		temp = dst_addr[2];
-		dst_addr[2] = src_addr[2];
-		src_addr[2] = temp;
+		temp = d_addr[0];
+		d_addr[0] = s_addr[0];
+		s_addr[0] = temp;
+		temp = d_addr[1];
+		d_addr[1] = s_addr[1];
+		s_addr[1] = temp;
+		temp = d_addr[2];
+		d_addr[2] = s_addr[2];
+		s_addr[2] = temp;
 
 		if(wtime_n)
 			while((__globaltimer() - pkt_start) < wtime_n);
 #ifdef DEBUG_PRINT
 		/* Code to verify source and dest of ethernet addresses */
 		printf("After Swap, Source: %x:%x:%x:%x:%x:%x Dest: %x:%x:%x:%x:%x:%x\n",
-				((uint8_t *) (src_addr))[0], ((uint8_t *) (src_addr))[1],
-				((uint8_t *) (src_addr))[2], ((uint8_t *) (src_addr))[3],
-				((uint8_t *) (src_addr))[4], ((uint8_t *) (src_addr))[5],
-				((uint8_t *) (dst_addr))[0], ((uint8_t *) (dst_addr))[1],
-				((uint8_t *) (dst_addr))[2], ((uint8_t *) (dst_addr))[3],
-				((uint8_t *) (dst_addr))[4], ((uint8_t *) (dst_addr))[5]);
+				((uint8_t *) (s_addr))[0], ((uint8_t *) (s_addr))[1],
+				((uint8_t *) (s_addr))[2], ((uint8_t *) (s_addr))[3],
+				((uint8_t *) (s_addr))[4], ((uint8_t *) (s_addr))[5],
+				((uint8_t *) (d_addr))[0], ((uint8_t *) (d_addr))[1],
+				((uint8_t *) (d_addr))[2], ((uint8_t *) (d_addr))[3],
+				((uint8_t *) (d_addr))[4], ((uint8_t *) (d_addr))[5]);
 #endif
 	}
 
@@ -114,7 +114,7 @@ __global__ void kernel_persistent_mac_update(struct rte_gpu_comm_list * comm_lis
 	int item_index = 0;
 	unsigned long long pkt_start;
 	struct rte_ether_hdr *eth;
-	uint16_t *src_addr, *dst_addr, temp;
+	uint16_t *s_addr, *d_addr, temp;
 	uint32_t wait_status;
 	__shared__ uint32_t wait_status_shared[1];
 		
@@ -145,36 +145,36 @@ __global__ void kernel_persistent_mac_update(struct rte_gpu_comm_list * comm_lis
 				pkt_start = __globaltimer();
 
 			eth = (struct rte_ether_hdr *)(((uint8_t *) (comm_list[item_index].pkt_list[idx].addr)));
-			src_addr = (uint16_t *) (&eth->src_addr);
-			dst_addr = (uint16_t *) (&eth->dst_addr);
+			s_addr = (uint16_t *) (&eth->s_addr);
+			d_addr = (uint16_t *) (&eth->d_addr);
 
 #ifdef DEBUG_PRINT
 			/* Code to verify source and dest of ethernet addresses */
-			uint8_t *src = (uint8_t *) (&eth->src_addr);
-			uint8_t *dst = (uint8_t *) (&eth->dst_addr);
+			uint8_t *src = (uint8_t *) (&eth->s_addr);
+			uint8_t *dst = (uint8_t *) (&eth->d_addr);
 			printf("Before Swap, Source: %02x:%02x:%02x:%02x:%02x:%02x Dest: %02x:%02x:%02x:%02x:%02x:%02x\n",
 				src[0], src[1], src[2], src[3], src[4], src[5],
 				dst[0], dst[1], dst[2], dst[3], dst[4], dst[5]);
 #endif
-			temp = dst_addr[0];
-			dst_addr[0] = src_addr[0];
-			src_addr[0] = temp;
-			temp = dst_addr[1];
-			dst_addr[1] = src_addr[1];
-			src_addr[1] = temp;
-			temp = dst_addr[2];
-			dst_addr[2] = src_addr[2];
-			src_addr[2] = temp;
+			temp = d_addr[0];
+			d_addr[0] = s_addr[0];
+			s_addr[0] = temp;
+			temp = d_addr[1];
+			d_addr[1] = s_addr[1];
+			s_addr[1] = temp;
+			temp = d_addr[2];
+			d_addr[2] = s_addr[2];
+			s_addr[2] = temp;
 
 #ifdef DEBUG_PRINT
 		/* Code to verify source and dest of ethernet addresses */
 		printf("After Swap, Source: %x:%x:%x:%x:%x:%x Dest: %x:%x:%x:%x:%x:%x\n",
-		       ((uint8_t *) (src_addr))[0], ((uint8_t *) (src_addr))[1],
-		       ((uint8_t *) (src_addr))[2], ((uint8_t *) (src_addr))[3],
-		       ((uint8_t *) (src_addr))[4], ((uint8_t *) (src_addr))[5],
-		       ((uint8_t *) (dst_addr))[0], ((uint8_t *) (dst_addr))[1],
-		       ((uint8_t *) (dst_addr))[2], ((uint8_t *) (dst_addr))[3],
-		       ((uint8_t *) (dst_addr))[4], ((uint8_t *) (dst_addr))[5]);
+		       ((uint8_t *) (s_addr))[0], ((uint8_t *) (s_addr))[1],
+		       ((uint8_t *) (s_addr))[2], ((uint8_t *) (s_addr))[3],
+		       ((uint8_t *) (s_addr))[4], ((uint8_t *) (s_addr))[5],
+		       ((uint8_t *) (d_addr))[0], ((uint8_t *) (d_addr))[1],
+		       ((uint8_t *) (d_addr))[2], ((uint8_t *) (d_addr))[3],
+		       ((uint8_t *) (d_addr))[4], ((uint8_t *) (d_addr))[5]);
 #endif
 			if(wtime_n)
 				while((__globaltimer() - pkt_start) < wtime_n);
@@ -242,28 +242,28 @@ __global__ void kernel_graphs_mac_update(struct rte_gpu_comm_list * comm_item_li
 			pkt_start = __globaltimer();
 
 		struct rte_ether_hdr *eth = (struct rte_ether_hdr *)(((uint8_t *) (comm_item_list->pkt_list[idx].addr)));
-		uint16_t *src_addr = (uint16_t *) (&eth->src_addr);
-		uint16_t *dst_addr = (uint16_t *) (&eth->dst_addr);
+		uint16_t *s_addr = (uint16_t *) (&eth->s_addr);
+		uint16_t *d_addr = (uint16_t *) (&eth->d_addr);
 
 #ifdef DEBUG_PRINT
 		/* Code to verify source and dest of ethernet addresses */
-		uint8_t *src = (uint8_t *) (&eth->src_addr);
-		uint8_t *dst = (uint8_t *) (&eth->dst_addr);
+		uint8_t *src = (uint8_t *) (&eth->s_addr);
+		uint8_t *dst = (uint8_t *) (&eth->d_addr);
 		printf
 		    ("GRAPHS before Source: %02x:%02x:%02x:%02x:%02x:%02x Dest: %02x:%02x:%02x:%02x:%02x:%02x\n",
 		     src[0], src[1], src[2], src[3], src[4], src[5], dst[0],
 		     dst[1], dst[2], dst[3], dst[4], dst[5]);
 #endif
 
-		temp = dst_addr[0];
-		dst_addr[0] = src_addr[0];
-		src_addr[0] = temp;
-		temp = dst_addr[1];
-		dst_addr[1] = src_addr[1];
-		src_addr[1] = temp;
-		temp = dst_addr[2];
-		dst_addr[2] = src_addr[2];
-		src_addr[2] = temp;
+		temp = d_addr[0];
+		d_addr[0] = s_addr[0];
+		s_addr[0] = temp;
+		temp = d_addr[1];
+		d_addr[1] = s_addr[1];
+		s_addr[1] = temp;
+		temp = d_addr[2];
+		d_addr[2] = s_addr[2];
+		s_addr[2] = temp;
 
 		if(wtime_n)
 			while((__globaltimer() - pkt_start) < wtime_n);
@@ -271,12 +271,12 @@ __global__ void kernel_graphs_mac_update(struct rte_gpu_comm_list * comm_item_li
 #ifdef DEBUG_PRINT
 		/* Code to verify source and dest of ethernet addresses */
 		printf("GRAPHS after Source: %x:%x:%x:%x:%x:%x Dest: %x:%x:%x:%x:%x:%x\n",
-		       ((uint8_t *) (src_addr))[0], ((uint8_t *) (src_addr))[1],
-		       ((uint8_t *) (src_addr))[2], ((uint8_t *) (src_addr))[3],
-		       ((uint8_t *) (src_addr))[4], ((uint8_t *) (src_addr))[5],
-		       ((uint8_t *) (dst_addr))[0], ((uint8_t *) (dst_addr))[1],
-		       ((uint8_t *) (dst_addr))[2], ((uint8_t *) (dst_addr))[3],
-		       ((uint8_t *) (dst_addr))[4], ((uint8_t *) (dst_addr))[5]);
+		       ((uint8_t *) (s_addr))[0], ((uint8_t *) (s_addr))[1],
+		       ((uint8_t *) (s_addr))[2], ((uint8_t *) (s_addr))[3],
+		       ((uint8_t *) (s_addr))[4], ((uint8_t *) (s_addr))[5],
+		       ((uint8_t *) (d_addr))[0], ((uint8_t *) (d_addr))[1],
+		       ((uint8_t *) (d_addr))[2], ((uint8_t *) (d_addr))[3],
+		       ((uint8_t *) (d_addr))[4], ((uint8_t *) (d_addr))[5]);
 #endif
 	}
 
